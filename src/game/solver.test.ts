@@ -129,5 +129,7 @@ describe("wave solver", () => {
   it("rejects non-finite fallback entries at the machine-readable boundary", () => {
     expect(fallbackPatterns[0]?.precondition(entry({ velocity: Number.NaN }))).toBe(false)
     expect(fallbackPatterns[0]?.precondition(entry({ playerRadius: -1 }))).toBe(false)
+    expect(fallbackPatterns[0]?.precondition(entry({ squad: 1.5 }))).toBe(false)
+    expect(fallbackPatterns[0]?.precondition(entry({ playfieldWidth: 100.5 }))).toBe(false)
   })
 })

@@ -1,6 +1,6 @@
 import fc from "fast-check"
 import { expect, it } from "vitest"
-
+import { fallbackPatterns } from "./fallbacks"
 import { solveWave } from "./solver"
 import type { EntryState, WaveSegment } from "./waves"
 import { replayWitness } from "./waves"
@@ -48,6 +48,35 @@ it("returns an accepted replay witness for varied exact legal entry states", () 
           expect(replay.survived).toBe(true)
           expect(result.witness.productionInputs).toHaveLength(600)
         }
+      },
+    ),
+  )
+})
+
+it("production-replays every generated entry accepted by fallback preconditions", () => {
+  fc.assert(
+    fc.property(
+      fc.integer({ min: 1, max: 20 }),
+      fc.integer({ min: 20, max: 500 }),
+      fc.integer({ min: 0, max: 500 }),
+      fc.integer({ min: -40, max: 40 }),
+      fc.integer({ min: 0, max: 8 }),
+      (squad, width, xSeed, velocity, radius) => {
+        const state: EntryState = {
+          squad,
+          upgrades: { troop: 1, damage: 1, fireRate: 1, recovery: 1 },
+          x: xSeed % (width + 1),
+          velocity,
+          playfieldWidth: width,
+          playerRadius: radius,
+          blockerRadius: radius,
+          precedingSegments: [],
+        }
+        const pattern = fallbackPatterns[0]
+        if (pattern?.precondition(state) !== true) return
+        expect(() =>
+          replayWitness(state, pattern.segment(state), pattern.witness(state)),
+        ).not.toThrow()
       },
     ),
   )

@@ -13,6 +13,18 @@ export type FallbackPattern = Readonly<{
     upgrades: Readonly<
       Record<"troop" | "damage" | "fireRate" | "recovery", readonly [number, number]>
     >
+    integerOnly: readonly [
+      "squad",
+      "x",
+      "velocity",
+      "playfieldWidth",
+      "playerRadius",
+      "blockerRadius",
+      "upgrades.troop",
+      "upgrades.damage",
+      "upgrades.fireRate",
+      "upgrades.recovery",
+    ]
   }>
   precondition: (entry: EntryState) => boolean
   segment: (entry: EntryState) => WaveSegment
@@ -69,9 +81,30 @@ export const fallbackPatterns: readonly FallbackPattern[] = [
         fireRate: [0, 100],
         recovery: [0, 100],
       },
+      integerOnly: [
+        "squad",
+        "x",
+        "velocity",
+        "playfieldWidth",
+        "playerRadius",
+        "blockerRadius",
+        "upgrades.troop",
+        "upgrades.damage",
+        "upgrades.fireRate",
+        "upgrades.recovery",
+      ],
     },
     precondition: (entry) =>
       Object.values(entry.upgrades).every(Number.isFinite) &&
+      [
+        entry.squad,
+        entry.x,
+        entry.velocity,
+        entry.playfieldWidth,
+        entry.playerRadius,
+        entry.blockerRadius,
+        ...Object.values(entry.upgrades),
+      ].every(Number.isSafeInteger) &&
       Object.values(entry.upgrades).every((level) => level >= 0) &&
       Object.values(entry.upgrades).every((level) => level <= 100) &&
       [
