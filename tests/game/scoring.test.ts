@@ -8,6 +8,7 @@ import {
   scoreRun,
   survivalMultiplierPermille,
 } from "../../src/game/scoring"
+import { position, score, tick } from "../../src/game/types"
 
 describe("run scoring", () => {
   it("Given metrics When components are scored Then each source remains separate", () => {
@@ -24,12 +25,12 @@ describe("run scoring", () => {
 
   it("Given completed run metrics When scored Then returns an integer breakdown", () => {
     const result = scoreRun({
-      distance: 12_345,
-      basicKills: 3,
-      eliteKills: 2,
-      bosses: 1,
-      closeCalls: 4,
-      survivedMs: 90_000,
+      distance: position(12_345),
+      basicKills: score(3),
+      eliteKills: score(2),
+      bosses: score(1),
+      closeCalls: score(4),
+      survivedMs: tick(90_000),
     })
 
     expect(result).toEqual({
@@ -50,25 +51,27 @@ describe("run scoring", () => {
     Number.MAX_SAFE_INTEGER,
   ])("Given invalid distance %s When scored Then rejects unsafe metrics", (distance) => {
     expect(() =>
-      scoreRun({
-        distance,
-        basicKills: 3,
-        eliteKills: 2,
-        bosses: 1,
-        closeCalls: 4,
-        survivedMs: 90_000,
-      }),
+      Reflect.apply(scoreRun, undefined, [
+        {
+          distance,
+          basicKills: 3,
+          eliteKills: 2,
+          bosses: 1,
+          closeCalls: 4,
+          survivedMs: 90_000,
+        },
+      ]),
     ).toThrow()
   })
 
   it("Given valid metrics When scored Then every component is a safe integer", () => {
     const breakdown = scoreRun({
-      distance: 100,
-      basicKills: 1,
-      eliteKills: 1,
-      bosses: 1,
-      closeCalls: 1,
-      survivedMs: 30_000,
+      distance: position(100),
+      basicKills: score(1),
+      eliteKills: score(1),
+      bosses: score(1),
+      closeCalls: score(1),
+      survivedMs: tick(30_000),
     })
 
     expect(Object.values(breakdown).every(Number.isSafeInteger)).toBe(true)

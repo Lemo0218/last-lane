@@ -6,7 +6,8 @@ import { position, score, tick } from "../../src/game/types"
 
 const noUpgrades: UpgradeLevels = { troop: 0, damage: 0, fireRate: 0, recovery: 0 }
 
-const step = (state: SimulationState, moveX = 0) => stepSimulation(state, { moveX, paused: false })
+const step = (state: SimulationState, moveX: -1 | 0 | 1 = 0) =>
+  stepSimulation(state, { moveX, paused: false })
 
 describe("combat simulation", () => {
   it("Given movement input When fixed step runs Then player remains in bounds", () => {
@@ -130,13 +131,15 @@ describe("combat simulation", () => {
   it("Given invalid movement When stepped Then rejects non-quantized input", () => {
     const state = createSimulation(1, noUpgrades)
 
-    expect(() => stepSimulation(state, { moveX: 0.5, paused: false })).toThrow()
+    expect(() =>
+      Reflect.apply(stepSimulation, undefined, [state, { moveX: 0.5, paused: false }]),
+    ).toThrow()
   })
 
   it("Given semantic values When constructed Then reject fractional and unsafe units", () => {
-    expect(tick(3).value).toBe(3)
-    expect(position(10).value).toBe(10)
-    expect(score(20).value).toBe(20)
+    expect(tick(3)).toBe(3)
+    expect(position(10)).toBe(10)
+    expect(score(20)).toBe(20)
     expect(() => tick(1.5)).toThrow()
     expect(() => position(Number.MAX_SAFE_INTEGER + 1)).toThrow()
     expect(() => createSimulation(1, noUpgrades, { playerX: 1.5 })).toThrow()

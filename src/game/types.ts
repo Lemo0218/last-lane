@@ -4,22 +4,16 @@ export type RunStatus = "running" | "game-over" | "complete"
 
 import { requireNatural } from "./validation"
 
-export type Tick = Readonly<{ value: number; unit: "tick" }>
-export type Position = Readonly<{ value: number; unit: "position" }>
-export type Score = Readonly<{ value: number; unit: "score" }>
+declare const tickBrand: unique symbol
+declare const positionBrand: unique symbol
+declare const scoreBrand: unique symbol
+export type Tick = number & { readonly [tickBrand]: "Tick" }
+export type Position = number & { readonly [positionBrand]: "Position" }
+export type Score = number & { readonly [scoreBrand]: "Score" }
 
-export const tick = (value: number): Tick => ({
-  value: requireNatural("tick", value),
-  unit: "tick",
-})
-export const position = (value: number): Position => ({
-  value: requireNatural("position", value),
-  unit: "position",
-})
-export const score = (value: number): Score => ({
-  value: requireNatural("score", value),
-  unit: "score",
-})
+export const tick = (value: number): Tick => requireNatural("tick", value) as Tick
+export const position = (value: number): Position => requireNatural("position", value) as Position
+export const score = (value: number): Score => requireNatural("score", value) as Score
 
 export type UpgradeLevels = Readonly<{
   troop: number
@@ -31,18 +25,18 @@ export type UpgradeLevels = Readonly<{
 export type Zombie = Readonly<{
   id: number
   kind: ZombieKind
-  x: number
+  x: Position
   hp: number
   damage: number
 }>
 
 export type Projectile = Readonly<{
   id: number
-  x: number
+  x: Position
   damage: number
 }>
 
-export type Gate = Readonly<{ id: number; kind: GateKind; x: number; level: number }>
+export type Gate = Readonly<{ id: number; kind: GateKind; x: Position; level: number }>
 
 export type SimulationEvent =
   | Readonly<{ kind: "shot-fired"; projectileId: number }>
@@ -55,15 +49,15 @@ export type SimulationEvent =
   | Readonly<{ kind: "game-over" }>
 
 export type SimulationInput = Readonly<{
-  moveX: number
+  moveX: -1 | 0 | 1
   paused: boolean
 }>
 
 export type SimulationState = Readonly<{
   seed: number
-  elapsedMs: number
-  distance: number
-  playerX: number
+  elapsedMs: Tick
+  distance: Position
+  playerX: Position
   squad: number
   maximumSquad: number
   shotDamage: number
@@ -84,4 +78,17 @@ export type SimulationState = Readonly<{
   status: RunStatus
 }>
 
-export type SimulationOverrides = Partial<SimulationState>
+type RawZombie = Omit<Zombie, "x"> & Readonly<{ x: number }>
+type RawProjectile = Omit<Projectile, "x"> & Readonly<{ x: number }>
+type RawGate = Omit<Gate, "x"> & Readonly<{ x: number }>
+export type SimulationOverrides = Partial<
+  Omit<SimulationState, "elapsedMs" | "distance" | "playerX" | "zombies" | "projectiles" | "gates">
+> &
+  Readonly<{
+    elapsedMs?: number
+    distance?: number
+    playerX?: number
+    zombies?: readonly RawZombie[]
+    projectiles?: readonly RawProjectile[]
+    gates?: readonly RawGate[]
+  }>

@@ -1,7 +1,11 @@
+import { MAX_ENTITIES } from "./config"
 import type { SimulationState } from "./types"
 import { requireNatural } from "./validation"
 
 export const validateSimulationState = (state: SimulationState): SimulationState => {
+  if (state.zombies.length + state.projectiles.length + state.gates.length > MAX_ENTITIES) {
+    throw new RangeError("entity count exceeds MAX_ENTITIES")
+  }
   const fields = [
     ["elapsed milliseconds", state.elapsedMs],
     ["distance", state.distance],

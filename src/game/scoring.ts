@@ -1,21 +1,25 @@
+import type { Position, Score, Tick } from "./types"
+import { score } from "./types"
+import { requireNatural, requireSafeProduct, requireSafeSum } from "./validation"
+
 export type RunMetrics = Readonly<{
-  distance: number
-  basicKills: number
-  eliteKills: number
-  bosses: number
-  closeCalls: number
-  survivedMs: number
+  distance: Position
+  basicKills: Score
+  eliteKills: Score
+  bosses: Score
+  closeCalls: Score
+  survivedMs: Tick
 }>
 
 export type ScoreBreakdown = Readonly<{
-  distance: number
-  basicKills: number
-  elites: number
-  bosses: number
-  closeCalls: number
-  subtotal: number
+  distance: Score
+  basicKills: Score
+  elites: Score
+  bosses: Score
+  closeCalls: Score
+  subtotal: Score
   survivalMultiplierPermille: number
-  total: number
+  total: Score
 }>
 
 export const distanceScore = (distance: number): number =>
@@ -53,15 +57,13 @@ export const scoreRun = (metrics: RunMetrics): ScoreBreakdown => {
   const multiplier = survivalMultiplierPermille(metrics.survivedMs)
   const scaledTotal = requireSafeProduct("scaled total", subtotal, multiplier)
   return {
-    distance,
-    basicKills,
-    elites,
-    bosses,
-    closeCalls,
-    subtotal,
+    distance: score(distance),
+    basicKills: score(basicKills),
+    elites: score(elites),
+    bosses: score(bosses),
+    closeCalls: score(closeCalls),
+    subtotal: score(subtotal),
     survivalMultiplierPermille: multiplier,
-    total: Math.floor(scaledTotal / 1000),
+    total: score(Math.floor(scaledTotal / 1000)),
   }
 }
-
-import { requireNatural, requireSafeProduct, requireSafeSum } from "./validation"

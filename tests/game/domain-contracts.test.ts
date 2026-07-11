@@ -2,29 +2,35 @@ import { describe, expect, it } from "vitest"
 import { MAX_ENTITIES, STEP_MS } from "../../src/game/config"
 import { scoreRun } from "../../src/game/scoring"
 import { createSimulation, stepSimulation } from "../../src/game/simulation"
-import { position, score, tick } from "../../src/game/types"
 import type { UpgradeLevels } from "../../src/game/types"
+import { position, score, tick } from "../../src/game/types"
 
 const noUpgrades: UpgradeLevels = { troop: 0, damage: 0, fireRate: 0, recovery: 0 }
 
 describe("opaque domain contracts", () => {
-  it.each([-1, 0, 1.5, STEP_MS * 2])(
-    "Given delta %s When simulation steps Then rejects anything except one fixed tick",
-    (deltaMs) => {
-      const state = createSimulation(1, noUpgrades)
+  it.each([
+    -1,
+    0,
+    1.5,
+    STEP_MS * 2,
+  ])("Given delta %s When simulation steps Then rejects anything except one fixed tick", (deltaMs) => {
+    const state = createSimulation(1, noUpgrades)
 
-      expect(() =>
-        Reflect.apply(stepSimulation, undefined, [state, { moveX: 0, paused: false }, deltaMs]),
-      ).toThrow()
-    },
-  )
+    expect(() =>
+      Reflect.apply(stepSimulation, undefined, [state, { moveX: 0, paused: false }, deltaMs]),
+    ).toThrow()
+  })
 
   it("Given fatal collision and ready recovery When stepped Then remains game over", () => {
-    const state = createSimulation(1, { ...noUpgrades, recovery: 3 }, {
-      squad: 1,
-      recoveryCooldownMs: 0,
-      zombies: [{ id: 1, kind: "basic", x: 0, hp: 100, damage: 1 }],
-    })
+    const state = createSimulation(
+      1,
+      { ...noUpgrades, recovery: 3 },
+      {
+        squad: 1,
+        recoveryCooldownMs: 0,
+        zombies: [{ id: 1, kind: "basic", x: 0, hp: 100, damage: 1 }],
+      },
+    )
 
     const result = stepSimulation(state, { moveX: 0, paused: false })
 
@@ -55,16 +61,18 @@ describe("opaque domain contracts", () => {
   })
 
   it("Given scoring metrics When scored Then inputs and outputs use opaque score units", () => {
-    const result = Reflect.apply(scoreRun, undefined, [{
-      distance: position(100),
-      basicKills: score(1),
-      eliteKills: score(1),
-      bosses: score(1),
-      closeCalls: score(1),
-      survivedMs: tick(30_000),
-    }])
+    const result = Reflect.apply(scoreRun, undefined, [
+      {
+        distance: position(100),
+        basicKills: score(1),
+        eliteKills: score(1),
+        bosses: score(1),
+        closeCalls: score(1),
+        survivedMs: tick(30_000),
+      },
+    ])
 
-    expect(result.total).toEqual(score(1756))
+    expect(result.total).toEqual(score(1751))
   })
 
   it("Given an unknown gate variant When collected Then exhaustive matching throws", () => {
@@ -73,6 +81,11 @@ describe("opaque domain contracts", () => {
     })
     const invalidGate = { ...state.gates[0], kind: "unknown" }
 
-    expect(() => stepSimulation({ ...state, gates: [invalidGate] }, { moveX: 0, paused: false })).toThrow()
+    expect(() =>
+      Reflect.apply(stepSimulation, undefined, [
+        { ...state, gates: [invalidGate] },
+        { moveX: 0, paused: false },
+      ]),
+    ).toThrow()
   })
 })

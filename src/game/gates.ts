@@ -39,6 +39,8 @@ export const collectGates = (state: SimulationState, playerX: number): GateResul
         recoveryAmount += gate.level
         recoveryEveryMs = 10_000
         break
+      default:
+        assertNeverGate(gate.kind)
     }
     events.push({ kind: "gate-collected", gateKind: gate.kind, level: gate.level })
   }
@@ -52,4 +54,8 @@ export const collectGates = (state: SimulationState, playerX: number): GateResul
     recoveryAmount,
     events,
   }
+}
+
+const assertNeverGate = (kind: never): never => {
+  throw new RangeError(`unknown gate kind: ${String(kind)}`)
 }

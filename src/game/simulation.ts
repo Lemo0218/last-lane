@@ -16,17 +16,17 @@ import type {
   SimulationInput,
   SimulationOverrides,
   SimulationState,
+  Tick,
   UpgradeLevels,
   Zombie,
   ZombieKind,
 } from "./types"
+import { position, tick } from "./types"
 import { requireNatural } from "./validation"
 
 const PLAYER_SPEED_PER_STEP = 8
 const PROJECTILE_SPEED_PER_STEP = 40
-const ZOMBIE_SPEED_PER_STEP = 4
 const COLLISION_DISTANCE = 12
-const COMBO_WINDOW_MS = 2000
 
 export const createSimulation = (
   seed: number,
@@ -39,11 +39,11 @@ export const createSimulation = (
   requireNatural("fire rate upgrade", upgrades.fireRate)
   requireNatural("recovery upgrade", upgrades.recovery)
   const maximumSquad = 3 + upgrades.troop
-  return validateSimulationState({
+  const initial: SimulationState = {
     seed,
-    elapsedMs: 0,
-    distance: 0,
-    playerX: 0,
+    elapsedMs: tick(0),
+    distance: position(0),
+    playerX: position(0),
     squad: maximumSquad,
     maximumSquad,
     shotDamage: 10 + upgrades.damage * 5,
@@ -62,7 +62,19 @@ export const createSimulation = (
     gates: [],
     events: [],
     status: "running",
+  }
+  return validateSimulationState({
+    ...initial,
     ...overrides,
+    elapsedMs: tick(overrides.elapsedMs ?? 0),
+    distance: position(overrides.distance ?? 0),
+    playerX: position(overrides.playerX ?? 0),
+    zombies: (overrides.zombies ?? []).map((zombie) => ({ ...zombie, x: position(zombie.x) })),
+    projectiles: (overrides.projectiles ?? []).map((projectile) => ({
+      ...projectile,
+      x: position(projectile.x),
+    })),
+    gates: (overrides.gates ?? []).map((gate) => ({ ...gate, x: position(gate.x) })),
   })
 }
 
@@ -101,7 +113,7 @@ const resolveProjectileCollisions = (
     else {
       remainingZombies.splice(targetIndex, 1)
       nextCombo += 1
-      nextExpiry = elapsedMs + COMBO_WINDOW_MS
+      nextExpiry = elapsedMs + 2000
       events.push({ kind: "zombie-killed", zombieKind: target.kind })
     }
   }
@@ -117,7 +129,7 @@ const resolveProjectileCollisions = (
 const zombieForTier = (id: number, tier: number, kind: ZombieKind): Zombie => ({
   id,
   kind,
-  x: WORLD_MAX_X,
+  x: position(WORLD_MAX_X),
   hp: kind === "boss" ? (100 + tier * 25) * 5 : 100 + tier * 25,
   damage: kind === "boss" ? 2 : 1,
 })
@@ -125,8 +137,9 @@ const zombieForTier = (id: number, tier: number, kind: ZombieKind): Zombie => ({
 export const stepSimulation = (
   state: SimulationState,
   input: SimulationInput,
-  deltaMs: number = STEP_MS,
+  deltaMs: Tick = tick(STEP_MS),
 ): SimulationState => {
+  if (deltaMs !== STEP_MS) throw new RangeError("deltaMs must equal STEP_MS")
   if (input.paused || state.status !== "running") return state
   if (state.squad === 0) return { ...state, events: [{ kind: "game-over" }], status: "game-over" }
   if (input.moveX !== -1 && input.moveX !== 0 && input.moveX !== 1) {
@@ -140,9 +153,9 @@ export const stepSimulation = (
   const gates = collectGates(state, playerX)
   const events: SimulationEvent[] = [...gates.events]
   let nextId = state.nextEntityId
-  let projectiles = state.projectiles.map((projectile) => ({
+  let projectiles: Projectile[] = state.projectiles.map((projectile) => ({
     ...projectile,
-    x: projectile.x + PROJECTILE_SPEED_PER_STEP,
+    x: position(projectile.x + PROJECTILE_SPEED_PER_STEP),
   }))
   let fireCooldownMs = Math.max(0, state.fireCooldownMs - deltaMs)
   if (
@@ -150,14 +163,14 @@ export const stepSimulation = (
     state.zombies.length > 0 &&
     state.zombies.length + projectiles.length + state.gates.length < MAX_ENTITIES
   ) {
-    projectiles = [...projectiles, { id: nextId, x: playerX, damage: gates.shotDamage }]
+    projectiles = [...projectiles, { id: nextId, x: position(playerX), damage: gates.shotDamage }]
     events.push({ kind: "shot-fired", projectileId: nextId })
     nextId += 1
     fireCooldownMs = gates.fireIntervalMs
   }
-  const movedZombies = state.zombies.map((zombie) => ({
+  const movedZombies: Zombie[] = state.zombies.map((zombie) => ({
     ...zombie,
-    x: Math.max(WORLD_MIN_X, zombie.x - ZOMBIE_SPEED_PER_STEP),
+    x: position(Math.max(WORLD_MIN_X, zombie.x - 4)),
   }))
   const collisions = resolveProjectileCollisions(
     movedZombies,
@@ -173,7 +186,12 @@ export const stepSimulation = (
   let squad = Math.max(0, gates.squad - damage)
   if (damage > 0) events.push({ kind: "squad-damaged", amount: damage })
   let recoveryCooldownMs = Math.max(0, state.recoveryCooldownMs - deltaMs)
-  if (gates.recoveryEveryMs > 0 && recoveryCooldownMs === 0 && squad < gates.maximumSquad) {
+  if (
+    squad > 0 &&
+    gates.recoveryEveryMs > 0 &&
+    recoveryCooldownMs === 0 &&
+    squad < gates.maximumSquad
+  ) {
     const recovery = Math.min(gates.recoveryAmount, gates.maximumSquad - squad)
     squad += recovery
     recoveryCooldownMs = gates.recoveryEveryMs
@@ -212,9 +230,9 @@ export const stepSimulation = (
   return {
     ...state,
     seed: nextRandom(state.seed).seed,
-    elapsedMs,
-    distance: state.distance + Math.abs(input.moveX * PLAYER_SPEED_PER_STEP),
-    playerX,
+    elapsedMs: tick(elapsedMs),
+    distance: position(state.distance + Math.abs(input.moveX * PLAYER_SPEED_PER_STEP)),
+    playerX: position(playerX),
     squad,
     maximumSquad: gates.maximumSquad,
     shotDamage: gates.shotDamage,
