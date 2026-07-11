@@ -1,5 +1,5 @@
 import { expect, it } from "vitest"
-import reconcile from "../../api/reconcile"
+import { reconcile } from "../../api/reconcile"
 import { InMemoryBlobAdapter, RankingStore } from "../../src/server/blob-store"
 
 it("repairs a verified pending run after its ticket deadline", async () => {

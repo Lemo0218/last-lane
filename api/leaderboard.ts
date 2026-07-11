@@ -1,6 +1,6 @@
 import { RankingStore, VercelBlobAdapter } from "../src/server/blob-store"
 
-export default async function handler(request: Request): Promise<Response> {
+export async function GET(request: Request): Promise<Response> {
   if (request.method !== "GET")
     return Response.json({ error: "method not allowed" }, { status: 405 })
   if (process.env["BLOB_READ_WRITE_TOKEN"] === undefined)

@@ -7,7 +7,7 @@ import { issueTicket } from "../src/server/ticket"
 const limiter = new LayeredRateLimiter("ticket-issuance", { burst: 5, sustained: 30 })
 const json = (body: unknown, status = 200): Response => Response.json(body, { status })
 
-export default async function handler(request: Request): Promise<Response> {
+export async function POST(request: Request): Promise<Response> {
   if (request.method !== "POST") return json({ error: "method not allowed" }, 405)
   const secrets = rankingSecrets(process.env)
   if (secrets === undefined || process.env["BLOB_READ_WRITE_TOKEN"] === undefined)

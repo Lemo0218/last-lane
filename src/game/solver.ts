@@ -82,7 +82,7 @@ const initialState = (entry: EntryState): SearchState => ({
 
 const hasContinuousEntry = (entry: EntryState): boolean => {
   if (entry.precedingSegments.length > 2) return false
-  const preceding = entry.precedingSegments.at(-1)
+  const preceding = entry.precedingSegments[entry.precedingSegments.length - 1]
   return (
     preceding === undefined ||
     (preceding.survived && preceding.exitX === entry.x && preceding.exitVelocity === entry.velocity)

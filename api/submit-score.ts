@@ -56,12 +56,9 @@ export const submitScore = async (
       submittedAt: new Date(minute).toISOString(),
     }
     const store = dependencies.store
-    const repaired = await store.repairExisting(run)
-    let acceptedRun = repaired ?? run
-    if (repaired === undefined) {
-      if (now > ticket.submissionDeadline) throw new TicketError("expired-ticket")
-      acceptedRun = await store.publish(run)
-    }
+    const acceptedRun =
+      now <= ticket.submissionDeadline ? await store.publish(run) : await store.repairExisting(run)
+    if (acceptedRun === undefined) throw new TicketError("expired-ticket")
     const board = await store.leaderboard()
     return json({
       accepted: true,
@@ -84,7 +81,7 @@ export const submitScore = async (
   }
 }
 
-export default async function handler(request: Request): Promise<Response> {
+export async function POST(request: Request): Promise<Response> {
   const secrets = rankingSecrets(process.env)
   if (secrets === undefined || process.env["BLOB_READ_WRITE_TOKEN"] === undefined)
     return json({ error: "ranking unavailable" }, 503)

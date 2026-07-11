@@ -1,6 +1,6 @@
 import { RankingStore, VercelBlobAdapter } from "../src/server/blob-store"
 
-export default async function handler(request: Request): Promise<Response> {
+export async function reconcile(request: Request): Promise<Response> {
   if (request.method !== "POST" && request.method !== "GET")
     return Response.json({ error: "method not allowed" }, { status: 405 })
   const secret = process.env["CRON_SECRET"]
@@ -18,3 +18,6 @@ export default async function handler(request: Request): Promise<Response> {
     throw error
   }
 }
+
+export const GET = reconcile
+export const POST = reconcile
