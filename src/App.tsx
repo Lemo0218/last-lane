@@ -45,7 +45,7 @@ export function App({ rankingClient, storage = localStorage, runtimeFactory }: A
   const [submissionState, setSubmissionState] = useState<SubmissionState>("idle")
   const [submissionMessage, setSubmissionMessage] = useState<string>()
   const [playingRunId, setPlayingRunId] = useState(0)
-  const [runSeed, setRunSeed] = useState(1)
+  const [runSeed, setRunSeed] = useState(0)
   const generationRef = useRef(0)
   const submissionNonceRef = useRef(0)
   const visibleSubmissionRef = useRef<string | undefined>(undefined)
@@ -98,7 +98,7 @@ export function App({ rankingClient, storage = localStorage, runtimeFactory }: A
     const ranked = navigator.onLine && (await session.start())
     if (generation !== generationRef.current) return
     setOffline(!ranked)
-    setRunSeed(session.ticket()?.seed ?? 1)
+    setRunSeed(session.ticket()?.seed ?? 0)
     setRank(undefined)
     setPlayingRunId(generation)
     setScreen("playing")

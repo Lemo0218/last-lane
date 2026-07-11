@@ -46,7 +46,9 @@ describe("ranking store", () => {
       submittedAt: "2026-01-01T00:00:00.000Z",
     }
     await adapter.put("pending/stable.json", JSON.stringify(run), { allowOverwrite: false })
-    expect(await store.repairExisting(run)).toBe(true)
+    expect(await store.repairExisting({ ...run, submittedAt: "2026-01-01T00:09:00.000Z" })).toEqual(
+      run,
+    )
     await expect(store.publish({ ...run, nickname: "Other" })).rejects.toThrow("conflict")
   })
 

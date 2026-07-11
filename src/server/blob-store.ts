@@ -85,6 +85,12 @@ export class VercelBlobAdapter implements BlobAdapter {
 const MAX_SCORE = 9_999_999_999_999_999_999n
 const canonical = (run: RankedRun): string => JSON.stringify(run)
 const same = (stored: Stored, run: RankedRun): boolean => stored.body === canonical(run)
+const sameResult = (left: RankedRun, right: RankedRun): boolean =>
+  left.nonce === right.nonce &&
+  left.ticketDigest === right.ticketDigest &&
+  left.nickname === right.nickname &&
+  left.score === right.score &&
+  left.survivalTicks === right.survivalTicks
 export const scorePath = (
   run: Pick<RankedRun, "score" | "survivalTicks" | "submittedAt" | "nonce">,
 ): string => {
@@ -95,18 +101,20 @@ export const scorePath = (
 
 export class RankingStore {
   constructor(readonly adapter: BlobAdapter) {}
-  async repairExisting(run: RankedRun): Promise<boolean> {
+  async repairExisting(run: RankedRun): Promise<RankedRun | undefined> {
     const completed = await this.adapter.get(`runs/${run.nonce}.json`)
     if (completed !== undefined) {
-      if (!same(completed, run)) throw new RankingConflictError()
-      return true
+      const storedRun = rankedRunSchema.parse(JSON.parse(completed.body))
+      if (!sameResult(storedRun, run)) throw new RankingConflictError()
+      return storedRun
     }
     const pendingPath = `pending/${run.nonce}.json`
     const pending = await this.adapter.get(pendingPath)
-    if (pending === undefined) return false
-    if (!same(pending, run)) throw new RankingConflictError()
-    await this.project(run, pendingPath)
-    return true
+    if (pending === undefined) return undefined
+    const storedRun = rankedRunSchema.parse(JSON.parse(pending.body))
+    if (!sameResult(storedRun, run)) throw new RankingConflictError()
+    await this.project(storedRun, pendingPath)
+    return storedRun
   }
   async publish(run: RankedRun): Promise<void> {
     const runPath = `runs/${run.nonce}.json`

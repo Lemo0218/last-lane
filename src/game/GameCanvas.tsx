@@ -2,7 +2,9 @@ import { useEffect, useRef, useState } from "react"
 import { Hud } from "../ui/Hud"
 import { PauseMenu } from "../ui/PauseMenu"
 import { createGameAudio } from "./audio"
+import { captureE2EGolden } from "./e2e-golden"
 import { advanceFrame, type FrameClock } from "./frame-clock"
+import { GAME_E2E_ENABLED, INITIAL_GAME_TELEMETRY, reportAudioFailure } from "./game-canvas-support"
 import { createInputController } from "./input"
 import { renderGame, resizeCanvas } from "./renderer"
 import { accumulateRunScore, finalRunScore, INITIAL_RUN_SCORE } from "./run-score"
@@ -13,35 +15,10 @@ import { solveWave } from "./solver"
 import { createTranscriptRecorder, type Transcript } from "./transcript"
 import { createWaveRuntime, type WaveRuntimeDependencies } from "./wave-runtime"
 
-type Telemetry = Readonly<{
-  playerX: number
-  wave: number
-  zombies: number
-  projectiles: number
-  boss: boolean
-  kills: number
-  gates: number
-  collectedGates: number
-}>
-const INITIAL_TELEMETRY: Telemetry = {
-  playerX: 500,
-  wave: 1,
-  zombies: 0,
-  projectiles: 0,
-  boss: false,
-  kills: 0,
-  gates: 0,
-  collectedGates: 0,
-}
-const E2E_ENABLED = import.meta.env.VITE_E2E === "true"
-const reportAudioFailure = (error: unknown): void => {
-  console.warn("게임 오디오를 사용할 수 없습니다.", error instanceof Error ? error.message : error)
-}
-
 export const GameCanvas = ({
   audioFactory = createGameAudio,
   runtimeFactory = createWaveRuntime,
-  seed = 1,
+  seed = 0,
   onFinish,
 }: Readonly<{
   audioFactory?: typeof createGameAudio
@@ -57,7 +34,7 @@ export const GameCanvas = ({
   const [paused, setPaused] = useState(false)
   const [muted, setMuted] = useState(false)
   const [stats, setStats] = useState(INITIAL_STATS)
-  const [telemetry, setTelemetry] = useState(INITIAL_TELEMETRY)
+  const [telemetry, setTelemetry] = useState(INITIAL_GAME_TELEMETRY)
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -67,7 +44,7 @@ export const GameCanvas = ({
     const input = createInputController(joystick)
     const audio = audioFactory()
     audioRef.current = audio
-    const testMode = E2E_ENABLED
+    const testMode = GAME_E2E_ENABLED
       ? new URLSearchParams(window.location.search).get("testMode")
       : null
     const deterministicBoss = testMode === "boss" || testMode === "timeout-boss"
@@ -109,9 +86,19 @@ export const GameCanvas = ({
       if (!finished && state.status !== "running") {
         finished = true
         const elapsedMs = runtime.active.elapsedBeforeMs + runtime.active.production.atMs
+        const completedTranscript = transcript.snapshot(tick)
+        const completedScore = finalRunScore(scoreCounters, elapsedMs)
+        captureE2EGolden(
+          GAME_E2E_ENABLED,
+          seed,
+          completedTranscript,
+          completedScore,
+          state,
+          runtime.active.index,
+        )
         onFinish?.({
-          score: finalRunScore(scoreCounters, elapsedMs),
-          transcript: transcript.snapshot(tick),
+          score: completedScore,
+          transcript: completedTranscript,
         })
       }
       if (context !== null) renderGame(context, state, metrics, reducedMotion, runtime.active)
@@ -183,15 +170,15 @@ export const GameCanvas = ({
   return (
     <main
       className="game-shell"
-      data-player-x={E2E_ENABLED ? telemetry.playerX : undefined}
-      data-wave={E2E_ENABLED ? telemetry.wave : undefined}
-      data-zombies={E2E_ENABLED ? telemetry.zombies : undefined}
-      data-projectiles={E2E_ENABLED ? telemetry.projectiles : undefined}
-      data-boss={E2E_ENABLED ? telemetry.boss : undefined}
-      data-kills={E2E_ENABLED ? telemetry.kills : undefined}
-      data-score={E2E_ENABLED ? stats.score : undefined}
-      data-gates={E2E_ENABLED ? telemetry.gates : undefined}
-      data-collected-gates={E2E_ENABLED ? telemetry.collectedGates : undefined}
+      data-player-x={GAME_E2E_ENABLED ? telemetry.playerX : undefined}
+      data-wave={GAME_E2E_ENABLED ? telemetry.wave : undefined}
+      data-zombies={GAME_E2E_ENABLED ? telemetry.zombies : undefined}
+      data-projectiles={GAME_E2E_ENABLED ? telemetry.projectiles : undefined}
+      data-boss={GAME_E2E_ENABLED ? telemetry.boss : undefined}
+      data-kills={GAME_E2E_ENABLED ? telemetry.kills : undefined}
+      data-score={GAME_E2E_ENABLED ? stats.score : undefined}
+      data-gates={GAME_E2E_ENABLED ? telemetry.gates : undefined}
+      data-collected-gates={GAME_E2E_ENABLED ? telemetry.collectedGates : undefined}
     >
       <output className="sr-only" aria-live="polite">
         웨이브 {telemetry.wave}, 좀비 {telemetry.zombies}, 탄환 {telemetry.projectiles}

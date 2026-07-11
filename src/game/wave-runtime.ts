@@ -103,11 +103,11 @@ const runtimeFrom = (
 export const createWaveRuntime = (
   dependencies: WaveRuntimeDependencies | undefined = undefined,
   startIndex = 0,
-  seed = 1,
+  seed = 0,
 ): WaveRuntime => {
   const selectedDependencies: WaveRuntimeDependencies = dependencies ?? {
     candidate: (entry, index) => generateWaveCandidate(entry, index, seed),
-    solve: solveWave,
+    solve: (entry, segment) => solveWave(entry, segment, { budgetMs: Number.POSITIVE_INFINITY }),
   }
   const entry: EntryState = {
     squad: 3,

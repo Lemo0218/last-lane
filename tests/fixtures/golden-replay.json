@@ -1,0 +1,20 @@
+{
+  "seed": 0,
+  "transcript": { "entries": [{ "tick": 0, "move": "N" }], "endTick": 1352 },
+  "expected": {
+    "score": 100,
+    "survivalTicks": 1352,
+    "breakdown": {
+      "distance": 0,
+      "basicKills": 100,
+      "elites": 0,
+      "bosses": 0,
+      "closeCalls": 0,
+      "subtotal": 100,
+      "survivalMultiplierPermille": 1000,
+      "total": 100
+    },
+    "finalState": { "playerX": 500, "squad": 0, "wave": 2 },
+    "events": [{ "kind": "game-over" }]
+  }
+}
