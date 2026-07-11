@@ -9,7 +9,15 @@ describe("ResultScreen", () => {
     const replay = vi.fn()
     render(
       <ResultScreen
-        score={{ distance: 100, kills: 500, survival: 200, total: 800 }}
+        score={{
+          distance: 100,
+          basicKills: 300,
+          elites: 100,
+          bosses: 0,
+          closeCalls: 50,
+          survivalBonus: 250,
+          total: 800,
+        }}
         personalBest={900}
         rank={7}
         onReplay={replay}
@@ -23,6 +31,9 @@ describe("ResultScreen", () => {
     expect(screen.getByLabelText("닉네임")).toBeInTheDocument()
     expect(screen.getByRole("button", { name: "랭킹 등록" })).toBeInTheDocument()
     expect(screen.getByRole("button", { name: "리더보드 보기" })).toBeInTheDocument()
+    expect(screen.getByText("생존 보너스")).toBeInTheDocument()
+    const displayedParts = [100, 300, 100, 0, 50, 250]
+    expect(displayedParts.reduce((total, part) => total + part, 0)).toBe(800)
     expect(replay).toHaveBeenCalledOnce()
   })
 
@@ -30,7 +41,15 @@ describe("ResultScreen", () => {
     // Given / When
     render(
       <ResultScreen
-        score={{ distance: 1, kills: 2, survival: 3, total: 6 }}
+        score={{
+          distance: 1,
+          basicKills: 2,
+          elites: 0,
+          bosses: 0,
+          closeCalls: 0,
+          survivalBonus: 3,
+          total: 6,
+        }}
         personalBest={6}
         offline
         onReplay={vi.fn()}

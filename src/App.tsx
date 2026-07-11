@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 
 import { GameCanvas } from "./game/GameCanvas"
+import type { ScoreBreakdown } from "./game/scoring"
 import type { Transcript } from "./game/transcript"
+import type { createWaveRuntime } from "./game/wave-runtime"
 import { createRankingClient, type LeaderboardResult } from "./ranking/client"
 import { createRankedRun } from "./ranking/ranked-run"
 import { createRetryQueue } from "./ranking/retry-queue"
@@ -14,10 +16,16 @@ import { Tutorial } from "./ui/Tutorial"
 type Screen = "start" | "playing" | "result" | "leaderboard"
 type CompletedRun = Readonly<{ score: ResultScore; transcript: Transcript }>
 
-export function App() {
-  const progress = useMemo(() => createLocalProgress(localStorage), [])
-  const client = useMemo(() => createRankingClient(), [])
-  const queue = useMemo(() => createRetryQueue({ storage: localStorage }), [])
+type AppProps = Readonly<{
+  rankingClient?: ReturnType<typeof createRankingClient>
+  storage?: Storage
+  runtimeFactory?: typeof createWaveRuntime
+}>
+
+export function App({ rankingClient, storage = localStorage, runtimeFactory }: AppProps = {}) {
+  const progress = useMemo(() => createLocalProgress(storage), [storage])
+  const client = useMemo(() => rankingClient ?? createRankingClient(), [rankingClient])
+  const queue = useMemo(() => createRetryQueue({ storage }), [storage])
   const session = useMemo(
     () =>
       createRankedRun({
@@ -34,16 +42,34 @@ export function App() {
   const [rank, setRank] = useState<number>()
   const [board, setBoard] = useState<LeaderboardResult>()
 
+  const refreshRanking = useCallback(
+    async (acceptedRank: number): Promise<void> => {
+      setRank(acceptedRank)
+      setOffline(false)
+      setBoard(await client.leaderboard())
+    },
+    [client],
+  )
+
   useEffect(() => {
     const retry = (): void => {
-      void queue.flush(client.submit).catch((error: unknown) => {
-        console.warn("랭킹 재전송에 실패했습니다.", error instanceof Error ? error.message : error)
-      })
+      void queue
+        .flush(client.submit)
+        .then((accepted) => {
+          const latest = accepted.at(-1)
+          if (latest !== undefined) void refreshRanking(latest.rank)
+        })
+        .catch((error: unknown) => {
+          console.warn(
+            "랭킹 재전송에 실패했습니다.",
+            error instanceof Error ? error.message : error,
+          )
+        })
     }
     if (navigator.onLine) retry()
     window.addEventListener("online", retry)
     return () => window.removeEventListener("online", retry)
-  }, [client, queue])
+  }, [client, queue, refreshRanking])
 
   const start = async (): Promise<void> => {
     const ranked = navigator.onLine && (await session.start())
@@ -52,16 +78,17 @@ export function App() {
     setScreen("playing")
   }
   const finish = useCallback(
-    (
-      result: Readonly<{ score: number; kills: number; elapsedMs: number; transcript: Transcript }>,
-    ): void => {
+    (result: Readonly<{ score: ScoreBreakdown; transcript: Transcript }>): void => {
       const breakdown = {
-        distance: Math.max(0, result.score - result.kills * 100),
-        kills: result.kills * 100,
-        survival: Math.floor(result.elapsedMs / 1000) * 10,
-        total: result.score,
+        distance: result.score.distance,
+        basicKills: result.score.basicKills,
+        elites: result.score.elites,
+        bosses: result.score.bosses,
+        closeCalls: result.score.closeCalls,
+        survivalBonus: result.score.total - result.score.subtotal,
+        total: result.score.total,
       }
-      progress.recordBest(result.score)
+      progress.recordBest(result.score.total)
       setRun({ score: breakdown, transcript: result.transcript })
       setScreen("result")
     },
@@ -76,7 +103,12 @@ export function App() {
     }
     setScreen("leaderboard")
   }
-  if (screen === "playing") return <GameCanvas onFinish={finish} />
+  if (screen === "playing")
+    return runtimeFactory === undefined ? (
+      <GameCanvas onFinish={finish} />
+    ) : (
+      <GameCanvas runtimeFactory={runtimeFactory} onFinish={finish} />
+    )
   if (screen === "leaderboard")
     return (
       <Leaderboard
@@ -95,7 +127,7 @@ export function App() {
         onLeaderboard={() => void openLeaderboard()}
         onSubmit={(nickname) =>
           void session.finish(nickname, run.transcript).then((outcome) => {
-            if (outcome.kind === "ranked") setRank(outcome.rank)
+            if (outcome.kind === "ranked") void refreshRanking(outcome.rank)
             if (outcome.kind !== "ranked") setOffline(true)
           })
         }
@@ -103,7 +135,9 @@ export function App() {
     )
   return (
     <>
-      <StartScreen offline={!navigator.onLine} onPlay={() => void start()} />
+      <div inert={tutorial}>
+        <StartScreen offline={!navigator.onLine} onPlay={() => void start()} />
+      </div>
       {tutorial ? (
         <Tutorial
           onComplete={() => {

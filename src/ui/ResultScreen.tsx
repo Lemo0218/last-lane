@@ -2,8 +2,11 @@ import { useEffect, useRef, useState } from "react"
 
 export type ResultScore = Readonly<{
   distance: number
-  kills: number
-  survival: number
+  basicKills: number
+  elites: number
+  bosses: number
+  closeCalls: number
+  survivalBonus: number
   total: number
 }>
 type Props = Readonly<{
@@ -43,12 +46,24 @@ export const ResultScreen = ({
             <dd>{score.distance}</dd>
           </div>
           <div>
-            <dt>처치</dt>
-            <dd>{score.kills}</dd>
+            <dt>일반 처치</dt>
+            <dd>{score.basicKills}</dd>
           </div>
           <div>
-            <dt>생존</dt>
-            <dd>{score.survival}</dd>
+            <dt>엘리트</dt>
+            <dd>{score.elites}</dd>
+          </div>
+          <div>
+            <dt>보스</dt>
+            <dd>{score.bosses}</dd>
+          </div>
+          <div>
+            <dt>아슬아슬</dt>
+            <dd>{score.closeCalls}</dd>
+          </div>
+          <div>
+            <dt>생존 보너스</dt>
+            <dd>{score.survivalBonus}</dd>
           </div>
         </dl>
         <label className="nickname-field">

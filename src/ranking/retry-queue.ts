@@ -3,6 +3,7 @@ import { type Submission, submissionSchema } from "./client"
 
 const queueKey = "last-lane:ranking-retry-v1"
 const queueSchema = z.array(submissionSchema).max(8)
+type AcceptedRetry = Readonly<{ submission: Submission; rank: number }>
 
 export const createRetryQueue = ({
   storage,
@@ -29,19 +30,24 @@ export const createRetryQueue = ({
         ].slice(-8),
       ),
     size: (): number => read().length,
-    flush: async (submit: (value: Submission) => Promise<unknown>): Promise<void> => {
+    flush: async (
+      submit: (value: Submission) => Promise<Readonly<{ accepted: true; rank: number }>>,
+    ): Promise<readonly AcceptedRetry[]> => {
       const pending = read()
       const retained: Submission[] = []
+      const accepted: AcceptedRetry[] = []
       for (const item of pending) {
         if (now() >= item.ticket.deadlineMs) continue
         try {
-          await submit(item)
+          const result = await submit(item)
+          accepted.push({ submission: item, rank: result.rank })
         } catch (error) {
           if (error instanceof TypeError) retained.push(item)
           else throw error
         }
       }
       write(retained)
+      return accepted
     },
   }
 }

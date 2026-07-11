@@ -23,10 +23,20 @@ describe("ranking progression", () => {
     const queue = createRetryQueue({ storage: localStorage, now: () => 10 })
     queue.enqueue({ ticket: { token: "t", deadlineMs: 100 }, nickname: "생존자", transcript: [] })
     // When
-    await queue.flush(submit)
+    const accepted = await queue.flush(submit)
     // Then
     expect(submit).toHaveBeenCalledOnce()
     expect(queue.size()).toBe(0)
+    expect(accepted).toEqual([
+      {
+        submission: {
+          ticket: { token: "t", deadlineMs: 100 },
+          nickname: "생존자",
+          transcript: [],
+        },
+        rank: 4,
+      },
+    ])
   })
 
   it("requests a ticket before a ranked run and submits only the proof payload", async () => {
@@ -75,6 +85,63 @@ describe("ranking progression", () => {
     const ranked = await session.start()
     // Then
     expect(ranked).toBe(false)
+  })
+
+  it("clears a stale ticket before a failed restart", async () => {
+    // Given
+    const requestTicket = vi
+      .fn()
+      .mockResolvedValueOnce({ token: "stale", deadlineMs: 999 })
+      .mockRejectedValueOnce(new Error("offline"))
+    const submit = vi.fn()
+    const session = createRankedRun({ requestTicket, submit, enqueue: vi.fn(), now: () => 1 })
+    await session.start()
+    // When
+    await session.start()
+    const outcome = await session.finish("러너", [])
+    // Then
+    expect(outcome).toEqual({ kind: "unranked" })
+    expect(submit).not.toHaveBeenCalled()
+  })
+
+  it("atomically consumes a ticket after the first finish attempt", async () => {
+    // Given
+    const submit = vi.fn().mockResolvedValue({ accepted: true, rank: 7 })
+    const session = createRankedRun({
+      requestTicket: vi.fn().mockResolvedValue({ token: "once", deadlineMs: 999 }),
+      submit,
+      enqueue: vi.fn(),
+      now: () => 1,
+    })
+    await session.start()
+    // When
+    const first = await session.finish("러너", [])
+    const duplicate = await session.finish("러너", [])
+    // Then
+    expect(first).toEqual({ kind: "ranked", rank: 7 })
+    expect(duplicate).toEqual({ kind: "unranked" })
+    expect(submit).toHaveBeenCalledOnce()
+  })
+
+  it("consumes an expired ticket instead of retaining stale authorization", async () => {
+    // Given
+    let now = 100
+    const submit = vi.fn().mockResolvedValue({ accepted: true, rank: 7 })
+    const session = createRankedRun({
+      requestTicket: vi.fn().mockResolvedValue({ token: "expired", deadlineMs: 50 }),
+      submit,
+      enqueue: vi.fn(),
+      now: () => now,
+    })
+    await session.start()
+    // When
+    const expired = await session.finish("러너", [])
+    now = 1
+    const repeated = await session.finish("러너", [])
+    // Then
+    expect(expired).toEqual({ kind: "unranked" })
+    expect(repeated).toEqual({ kind: "unranked" })
+    expect(submit).not.toHaveBeenCalled()
   })
 
   it("parses leaderboard entries and returned ranks at the HTTP boundary", async () => {

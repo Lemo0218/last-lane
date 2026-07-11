@@ -21,6 +21,7 @@ export const createRankedRun = ({
   let ticket: RunTicket | undefined
   return {
     start: async (): Promise<boolean> => {
+      ticket = undefined
       try {
         ticket = await requestTicket()
         return true
@@ -30,8 +31,11 @@ export const createRankedRun = ({
       }
     },
     finish: async (nickname: string, transcript: Transcript): Promise<RankedOutcome> => {
-      if (ticket === undefined || now() >= ticket.deadlineMs) return { kind: "unranked" }
-      const payload = { ticket, nickname, transcript }
+      if (ticket === undefined) return { kind: "unranked" }
+      const consumedTicket = ticket
+      ticket = undefined
+      if (now() >= consumedTicket.deadlineMs) return { kind: "unranked" }
+      const payload = { ticket: consumedTicket, nickname, transcript }
       try {
         const result = await submit(payload)
         return { kind: "ranked", rank: result.rank }

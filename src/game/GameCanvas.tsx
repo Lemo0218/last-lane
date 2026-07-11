@@ -5,7 +5,9 @@ import { createGameAudio } from "./audio"
 import { advanceFrame, type FrameClock } from "./frame-clock"
 import { createInputController } from "./input"
 import { renderGame, resizeCanvas } from "./renderer"
-import { INITIAL_STATS, scoreForCombat, statsOf } from "./run-summary"
+import { accumulateRunScore, finalRunScore, INITIAL_RUN_SCORE } from "./run-score"
+import { INITIAL_STATS, statsOf } from "./run-summary"
+import type { ScoreBreakdown } from "./scoring"
 import { generateWaveCandidate } from "./segment-generator"
 import { solveWave } from "./solver"
 import { createTranscriptRecorder, type Transcript } from "./transcript"
@@ -38,12 +40,12 @@ const reportAudioFailure = (error: unknown): void => {
 
 export const GameCanvas = ({
   audioFactory = createGameAudio,
+  runtimeFactory = createWaveRuntime,
   onFinish,
 }: Readonly<{
   audioFactory?: typeof createGameAudio
-  onFinish?: (
-    result: Readonly<{ score: number; kills: number; elapsedMs: number; transcript: Transcript }>,
-  ) => void
+  runtimeFactory?: typeof createWaveRuntime
+  onFinish?: (result: Readonly<{ score: ScoreBreakdown; transcript: Transcript }>) => void
 }>) => {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const joystickRef = useRef<HTMLDivElement>(null)
@@ -74,10 +76,10 @@ export const GameCanvas = ({
             solveWave(entry, segment, { budgetMs: 0, clock: { now: () => 0 } }),
         }
       : undefined
-    let runtime = createWaveRuntime(forcedTimeout, deterministicBoss ? 4 : 0)
+    let runtime = runtimeFactory(forcedTimeout, deterministicBoss ? 4 : 0)
     let frame = 0
     let clock: FrameClock = { previous: performance.now(), accumulator: 0 }
-    let kills = 0
+    let scoreCounters = INITIAL_RUN_SCORE
     let tick = 0
     let finished = false
     const transcript = createTranscriptRecorder()
@@ -91,34 +93,37 @@ export const GameCanvas = ({
       const advanced = advanceFrame(clock, now, visible && !pausedRef.current)
       clock = advanced.clock
       for (let step = 0; step < advanced.steps; step += 1) {
+        const previousDistance = Number(runtime.active.production.simulation.distance)
         const currentInput = input.current()
         transcript.record(tick, currentInput.moveX)
         tick += 1
         runtime = runtime.step(currentInput)
         const state = runtime.active.production.simulation
-        kills += state.events.filter((event) => event.kind === "zombie-killed").length
+        const distanceDelta = Math.max(0, Number(state.distance) - previousDistance)
+        scoreCounters = accumulateRunScore(scoreCounters, distanceDelta, state.events)
         audio.play(state.events)
       }
       const state = runtime.active.production.simulation
       if (!finished && state.status !== "running") {
         finished = true
+        const elapsedMs = runtime.active.elapsedBeforeMs + runtime.active.production.atMs
         onFinish?.({
-          score: scoreForCombat(state, kills),
-          kills,
-          elapsedMs: runtime.active.elapsedBeforeMs + runtime.active.production.atMs,
+          score: finalRunScore(scoreCounters, elapsedMs),
           transcript: transcript.snapshot(),
         })
       }
       if (context !== null) renderGame(context, state, metrics, reducedMotion, runtime.active)
       if (advanced.steps > 0) {
-        setStats(statsOf(state, kills, runtime.active))
+        const elapsedMs = runtime.active.elapsedBeforeMs + runtime.active.production.atMs
+        const currentScore = finalRunScore(scoreCounters, elapsedMs)
+        setStats(statsOf(state, currentScore.total, runtime.active))
         setTelemetry({
           playerX: state.playerX,
           wave: runtime.active.index + 1,
           zombies: state.zombies.length,
           projectiles: state.projectiles.length,
           boss: state.zombies.some((zombie) => zombie.kind === "boss"),
-          kills,
+          kills: scoreCounters.basicKills + scoreCounters.eliteKills + scoreCounters.bosses,
           gates: runtime.active.segment.gates.filter(
             (gate) => !runtime.active.production.collectedGateIds.has(gate.id),
           ).length,
@@ -160,7 +165,7 @@ export const GameCanvas = ({
       void audio.close().catch(reportAudioFailure)
       audioRef.current = null
     }
-  }, [audioFactory, onFinish])
+  }, [audioFactory, onFinish, runtimeFactory])
 
   const togglePause = (): void => {
     if (!pausedRef.current && document.activeElement instanceof HTMLElement)

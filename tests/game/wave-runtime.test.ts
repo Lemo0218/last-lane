@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest"
 import { createProductionWaveState, stepProductionWave } from "../../src/game/production-wave"
-import { scoreForCombat } from "../../src/game/run-summary"
 import { type SolverResult, solveWave } from "../../src/game/solver"
 import { createWaveRuntime, type WaveRuntimeDependencies } from "../../src/game/wave-runtime"
 import {
@@ -147,9 +146,6 @@ describe("wave runtime", () => {
     // Then: the real zombie is removed and a kill event was emitted
     expect(killed).toBe(true)
     expect(production.simulation.zombies).toHaveLength(0)
-    expect(scoreForCombat(production.simulation, 1)).toBeGreaterThan(
-      scoreForCombat(production.simulation, 0),
-    )
   })
 
   it("allows a moving squad to kill a deterministic boss with the same combat rules", () => {

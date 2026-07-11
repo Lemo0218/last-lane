@@ -11,11 +11,12 @@ export const INITIAL_STATS: HudStats = {
   difficulty: 1,
 }
 
-export const scoreForCombat = (state: SimulationState, kills: number): number =>
-  Math.floor(Number(state.distance) / 8) + kills * 100 + state.combo * 25
-
-export const statsOf = (state: SimulationState, kills: number, active: ActiveWave): HudStats => ({
-  score: scoreForCombat(state, kills),
+export const statsOf = (
+  state: SimulationState,
+  totalScore: number,
+  active: ActiveWave,
+): HudStats => ({
+  score: totalScore,
   elapsedMs: active.elapsedBeforeMs + active.production.atMs,
   squad: state.squad,
   maximumSquad: state.maximumSquad,

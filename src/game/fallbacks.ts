@@ -1,35 +1,8 @@
+import type { FallbackPattern } from "./fallback-types"
 import type { EntryState, WaveSegment, WaveWitness, WitnessFrame } from "./waves"
 import { BOSS_HORIZON_MS, NORMAL_HORIZON_MS, SOLVER_STEP_MS } from "./waves"
 
-export type FallbackPattern = Readonly<{
-  id: string
-  bounds: Readonly<{
-    squad: readonly [number, number]
-    x: readonly [number, "playfieldWidth"]
-    velocity: readonly [number, number]
-    playfieldWidth: readonly [number, number]
-    collisionRadii: readonly [number, number]
-    precedingSegments: readonly [number, number]
-    upgrades: Readonly<
-      Record<"troop" | "damage" | "fireRate" | "recovery", readonly [number, number]>
-    >
-    integerOnly: readonly [
-      "squad",
-      "x",
-      "velocity",
-      "playfieldWidth",
-      "playerRadius",
-      "blockerRadius",
-      "upgrades.troop",
-      "upgrades.damage",
-      "upgrades.fireRate",
-      "upgrades.recovery",
-    ]
-  }>
-  precondition: (entry: EntryState) => boolean
-  segment: (entry: EntryState, waveIndex?: number) => WaveSegment
-  witness: (entry: EntryState, waveIndex?: number) => WaveWitness
-}>
+export type { FallbackPattern } from "./fallback-types"
 
 const fallbackSegment = (entry: EntryState, waveIndex = 1): WaveSegment => {
   const movesLeft = entry.x <= entry.playfieldWidth / 2
