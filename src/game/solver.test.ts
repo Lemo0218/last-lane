@@ -63,6 +63,30 @@ describe("wave solver", () => {
     expect(witness.productionInputs).toHaveLength(600)
   })
 
+  it("falls back when the monotonic generation clock overruns", () => {
+    let instant = 0
+    const result = solveWave(
+      entry(),
+      { id: "open", horizonMs: 6_000, blockers: [], gates: [] },
+      { clock: { now: () => (instant += 2) } },
+    )
+    expect(result.kind).toBe("fallback")
+    expect(result.elapsedMs).toBeGreaterThan(4)
+  })
+
+  it("requires a time-connected corridor rather than pointwise gaps", () => {
+    const segment: WaveSegment = {
+      id: "switching-gap",
+      horizonMs: 6_000,
+      blockers: [
+        { fromMs: 0, toMs: 100, minX: 45, maxX: 100, damage: 1 },
+        { fromMs: 100, toMs: 200, minX: 0, maxX: 55, damage: 1 },
+      ],
+      gates: [],
+    }
+    expect(solveWave(entry({ x: 10 }), segment).kind).toBe("fallback")
+  })
+
   it("chooses survival over a reward before a boss", () => {
     const segment: WaveSegment = {
       id: "boss",
@@ -70,7 +94,7 @@ describe("wave solver", () => {
       blockers: [{ fromMs: 3_000, toMs: 12_000, minX: 40, maxX: 100, damage: 4 }],
       gates: [{ id: "reward", atMs: 1_500, x: 80, radius: 6, kind: "damage", level: 5 }],
     }
-    const result = solveWave(entry(), segment)
+    const result = solveWave(entry(), segment, { clock: { now: () => 0 } })
     expect(result.kind).toBe("accepted")
     if (result.kind === "accepted") {
       expect(result.witness.finalSquad).toBeGreaterThanOrEqual(1)

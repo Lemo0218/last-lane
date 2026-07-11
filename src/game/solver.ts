@@ -1,14 +1,12 @@
 import { fallbackFor } from "./fallbacks"
+import type { ProductionWaveState } from "./production-wave"
+import { createProductionWaveState, stepProductionWave } from "./production-wave"
+import type { SimulationInput } from "./types"
 import type { EntryState, Move, WaveSegment, WaveWitness, WitnessFrame } from "./waves"
-import {
-  advanceMotion,
-  hasEscapeCorridor,
-  REACTION_DELAY_MS,
-  replayWitness,
-  SOLVER_STEP_MS,
-} from "./waves"
+import { hasEscapeCorridor, REACTION_DELAY_MS, replayWitness, SOLVER_STEP_MS } from "./waves"
 
-export type SolverOptions = Readonly<{ budgetMs?: number; now?: () => number }>
+export type Clock = Readonly<{ now: () => number }>
+export type SolverOptions = Readonly<{ budgetMs?: number; clock?: Clock }>
 export type SolverResult =
   | Readonly<{ kind: "accepted"; segment: WaveSegment; witness: WaveWitness; elapsedMs: number }>
   | Readonly<{
@@ -21,93 +19,65 @@ export type SolverResult =
     }>
 
 type SearchState = Readonly<{
-  x: number
-  velocity: number
-  squad: number
-  gates: ReadonlySet<string>
-  depth: number
-  parent: SearchState | null
-  frame: WitnessFrame | null
+  production: ProductionWaveState
+  inputs: readonly SimulationInput[]
+  frames: readonly WitnessFrame[]
 }>
-
 const moves = [-1, 0, 1] as const
 export const squadHealthBin = (squad: number): number => Math.floor(squad / 3)
 
-const stateKey = (state: SearchState): string =>
-  `${Math.round(state.x)}:${Math.round(state.velocity / 8)}:${squadHealthBin(state.squad)}:${[...state.gates].sort().join(",")}`
+const stateKey = (state: SearchState): string => {
+  const simulation = state.production.simulation
+  return `${Math.round(simulation.playerX)}:0:${squadHealthBin(simulation.squad)}:${[...state.production.collectedGateIds].sort().join(",")}`
+}
 
-const advance = (
+const expandAction = (
   entry: EntryState,
   segment: WaveSegment,
   state: SearchState,
   move: Move,
-  atMs: number,
-): SearchState => {
-  const motion = advanceMotion(state.x, state.velocity, move, entry.playfieldWidth)
-  let squad = state.squad
-  const gates = new Set(state.gates)
-  for (const blocker of segment.blockers) {
-    if (
-      blocker.fromMs <= atMs &&
-      atMs < blocker.toMs &&
-      motion.x + entry.playerRadius + entry.blockerRadius >= blocker.minX &&
-      motion.x - entry.playerRadius - entry.blockerRadius <= blocker.maxX
-    )
-      squad = Math.max(0, squad - blocker.damage)
+  deadline: number,
+  clock: Clock,
+): SearchState | null => {
+  let production = state.production
+  const inputs: SimulationInput[] = [...state.inputs]
+  for (let index = 0; index < SOLVER_STEP_MS / 10; index += 1) {
+    if (clock.now() >= deadline) return null
+    const moveX: Move = production.atMs < REACTION_DELAY_MS ? 0 : move
+    const input: SimulationInput = { moveX, paused: false }
+    production = stepProductionWave(entry, segment, production, input)
+    inputs.push(input)
   }
-  for (const gate of segment.gates) {
-    if (
-      !gates.has(gate.id) &&
-      Math.abs(gate.atMs - atMs) < SOLVER_STEP_MS &&
-      Math.abs(gate.x - motion.x) <= gate.radius + entry.playerRadius
-    ) {
-      gates.add(gate.id)
-      if (gate.kind === "troop" || gate.kind === "recovery") squad += gate.level
-    }
-  }
+  const simulation = production.simulation
   return {
-    x: motion.x,
-    velocity: motion.velocity,
-    squad,
-    gates,
-    depth: state.depth + 1,
-    parent: state,
-    frame: { atMs, move, x: motion.x, velocity: motion.velocity, squad },
+    production,
+    inputs,
+    frames: [
+      ...state.frames,
+      {
+        atMs: production.atMs,
+        move,
+        x: simulation.playerX,
+        velocity: 0,
+        squad: simulation.squad,
+      },
+    ],
   }
 }
 
-const witnessOf = (state: SearchState): WaveWitness => {
-  const frames: WitnessFrame[] = []
-  let cursor: SearchState | null = state
-  while (cursor?.frame !== null && cursor?.frame !== undefined) {
-    frames.push(cursor.frame)
-    cursor = cursor.parent
-  }
-  frames.reverse()
-  const productionInputs = frames.flatMap((frame) =>
-    Array.from({ length: SOLVER_STEP_MS / 10 }, (_, index) => ({
-      moveX: frame.atMs - SOLVER_STEP_MS + (index + 1) * 10 <= REACTION_DELAY_MS ? 0 : frame.move,
-      paused: false,
-    })),
-  )
-  return { frames, productionInputs, finalSquad: state.squad, collectedGateIds: [...state.gates] }
-}
+const witnessOf = (state: SearchState): WaveWitness => ({
+  frames: state.frames,
+  productionInputs: state.inputs,
+  finalSquad: state.production.simulation.squad,
+  finalX: state.production.simulation.playerX,
+  collectedGateIds: [...state.production.collectedGateIds],
+})
 
-const policyWitness = (entry: EntryState, segment: WaveSegment, move: Move): WaveWitness => {
-  let state: SearchState = {
-    x: entry.x,
-    velocity: entry.velocity,
-    squad: entry.squad,
-    gates: new Set(),
-    depth: 0,
-    parent: null,
-    frame: null,
-  }
-  for (let atMs = SOLVER_STEP_MS; atMs <= segment.horizonMs; atMs += SOLVER_STEP_MS) {
-    state = advance(entry, segment, state, atMs <= REACTION_DELAY_MS ? 0 : move, atMs)
-  }
-  return witnessOf(state)
-}
+const initialState = (entry: EntryState): SearchState => ({
+  production: createProductionWaveState(entry),
+  inputs: [],
+  frames: [],
+})
 
 const hasContinuousEntry = (entry: EntryState): boolean => {
   if (entry.precedingSegments.length > 2) return false
@@ -118,73 +88,66 @@ const hasContinuousEntry = (entry: EntryState): boolean => {
   )
 }
 
+const fallbackResult = (
+  entry: EntryState,
+  segment: WaveSegment,
+  elapsedMs: number,
+): SolverResult => ({
+  kind: "fallback",
+  rejectedSegment: segment,
+  ...fallbackFor(entry),
+  elapsedMs,
+})
+
 export const solveWave = (
   entry: EntryState,
   segment: WaveSegment,
   options: SolverOptions = {},
 ): SolverResult => {
-  const now = options.now ?? performance.now.bind(performance)
-  const startedAt = now()
+  const clock = options.clock ?? { now: () => performance.now() }
   const budgetMs = options.budgetMs ?? 4
-  if (hasEscapeCorridor(entry, segment) && hasContinuousEntry(entry)) {
-    for (const move of moves) {
-      const witness = policyWitness(entry, segment, move)
-      const generationElapsedMs = now() - startedAt
-      if (generationElapsedMs > budgetMs) break
+  const startedAt = clock.now()
+  const deadline = startedAt + budgetMs
+  if (!hasContinuousEntry(entry) || !hasEscapeCorridor(entry, segment))
+    return fallbackResult(entry, segment, clock.now() - startedAt)
+  for (const policy of moves) {
+    let state: SearchState | null = initialState(entry)
+    for (let atMs = SOLVER_STEP_MS; atMs <= segment.horizonMs; atMs += SOLVER_STEP_MS) {
+      state = state === null ? null : expandAction(entry, segment, state, policy, deadline, clock)
+      if (state === null || state.production.simulation.squad < 1) break
+    }
+    if (state !== null && state.production.atMs === segment.horizonMs) {
+      const witness = witnessOf(state)
       const replay = replayWitness(entry, segment, witness)
       if (replay.survived && replay.continuous && replay.escapeCorridor)
-        return { kind: "accepted", segment, witness, elapsedMs: generationElapsedMs }
+        return { kind: "accepted", segment, witness, elapsedMs: clock.now() - startedAt }
     }
   }
-  let frontier: readonly SearchState[] = [
-    {
-      x: entry.x,
-      velocity: entry.velocity,
-      squad: entry.squad,
-      gates: new Set(),
-      depth: 0,
-      parent: null,
-      frame: null,
-    },
-  ]
-  if (hasEscapeCorridor(entry, segment) && hasContinuousEntry(entry)) {
-    for (let atMs = SOLVER_STEP_MS; atMs <= segment.horizonMs; atMs += SOLVER_STEP_MS) {
-      if (now() - startedAt > budgetMs) break
-      const deduplicated = new Map<string, SearchState>()
-      const legalMoves: readonly Move[] = atMs <= REACTION_DELAY_MS ? [0] : moves
-      for (const state of frontier) {
-        for (const move of legalMoves) {
-          if (now() - startedAt >= budgetMs) break
-          const candidate = advance(entry, segment, state, move, atMs)
-          if (candidate.squad < 1) continue
-          const key = stateKey(candidate)
-          const previous = deduplicated.get(key)
-          if (previous === undefined || candidate.squad > previous.squad)
-            deduplicated.set(key, candidate)
-        }
+  let frontier: readonly SearchState[] = [initialState(entry)]
+  for (let atMs = SOLVER_STEP_MS; atMs <= segment.horizonMs; atMs += SOLVER_STEP_MS) {
+    const deduplicated = new Map<string, SearchState>()
+    for (const state of frontier) {
+      for (const move of moves) {
+        const candidate = expandAction(entry, segment, state, move, deadline, clock)
+        if (candidate === null) return fallbackResult(entry, segment, clock.now() - startedAt)
+        if (candidate.production.simulation.squad < 1) continue
+        const key = stateKey(candidate)
+        const previous = deduplicated.get(key)
+        if (
+          previous === undefined ||
+          candidate.production.simulation.squad > previous.production.simulation.squad
+        )
+          deduplicated.set(key, candidate)
       }
-      frontier = [...deduplicated.values()].sort((left, right) => right.squad - left.squad)
-      if (frontier.length === 0) break
     }
+    frontier = [...deduplicated.values()]
+    if (frontier.length === 0) break
   }
-  const completed = frontier.find((state) => state.depth === segment.horizonMs / SOLVER_STEP_MS)
-  if (completed !== undefined) {
+  const completed = frontier[0]
+  if (completed !== undefined && completed.production.atMs === segment.horizonMs) {
     const witness = witnessOf(completed)
-    const replay = replayWitness(entry, segment, witness)
-    if (replay.survived && replay.continuous && replay.escapeCorridor) {
-      return {
-        kind: "accepted",
-        segment,
-        witness,
-        elapsedMs: Math.min(budgetMs, now() - startedAt),
-      }
-    }
+    if (replayWitness(entry, segment, witness).survived)
+      return { kind: "accepted", segment, witness, elapsedMs: clock.now() - startedAt }
   }
-  const fallback = fallbackFor(entry)
-  return {
-    kind: "fallback",
-    rejectedSegment: segment,
-    ...fallback,
-    elapsedMs: Math.min(budgetMs, now() - startedAt),
-  }
+  return fallbackResult(entry, segment, clock.now() - startedAt)
 }

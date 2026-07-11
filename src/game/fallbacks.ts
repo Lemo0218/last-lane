@@ -1,5 +1,6 @@
+import { createProductionWaveState, stepProductionWave } from "./production-wave"
 import type { EntryState, WaveSegment, WaveWitness, WitnessFrame } from "./waves"
-import { advanceMotion, NORMAL_HORIZON_MS, SOLVER_STEP_MS } from "./waves"
+import { NORMAL_HORIZON_MS, SOLVER_STEP_MS } from "./waves"
 
 export type FallbackPattern = Readonly<{
   id: string
@@ -24,20 +25,31 @@ const openSegment = (): WaveSegment => ({
 })
 
 const neutralWitness = (entry: EntryState): WaveWitness => {
+  const segment = openSegment()
   const frames: WitnessFrame[] = []
-  let x = entry.x
-  let velocity = entry.velocity
-  for (let atMs = SOLVER_STEP_MS; atMs <= NORMAL_HORIZON_MS; atMs += SOLVER_STEP_MS) {
-    const motion = advanceMotion(x, velocity, 0, entry.playfieldWidth)
-    x = motion.x
-    velocity = motion.velocity
-    frames.push({ atMs, move: 0, x, velocity, squad: entry.squad })
-  }
+  let state = createProductionWaveState(entry)
   const productionInputs = Array.from({ length: NORMAL_HORIZON_MS / 10 }, () => ({
     moveX: 0 as const,
     paused: false,
   }))
-  return { frames, productionInputs, finalSquad: entry.squad, collectedGateIds: [] }
+  for (const input of productionInputs) {
+    state = stepProductionWave(entry, segment, state, input)
+    if (state.atMs % SOLVER_STEP_MS === 0)
+      frames.push({
+        atMs: state.atMs,
+        move: 0,
+        x: state.simulation.playerX,
+        velocity: 0,
+        squad: state.simulation.squad,
+      })
+  }
+  return {
+    frames,
+    productionInputs,
+    finalSquad: state.simulation.squad,
+    finalX: state.simulation.playerX,
+    collectedGateIds: [],
+  }
 }
 
 export const fallbackPatterns: readonly FallbackPattern[] = [
@@ -63,11 +75,16 @@ export const fallbackPatterns: readonly FallbackPattern[] = [
         entry.blockerRadius,
       ].every(Number.isFinite) &&
       entry.squad >= 1 &&
+      entry.squad <= Number.MAX_SAFE_INTEGER &&
       entry.velocity >= -40 &&
       entry.velocity <= 40 &&
       entry.playerRadius >= 0 &&
+      entry.playerRadius <= 500 &&
       entry.blockerRadius >= 0 &&
+      entry.blockerRadius <= 500 &&
       entry.precedingSegments.length <= 2 &&
+      entry.playfieldWidth >= 1 &&
+      entry.playfieldWidth <= 1_000 &&
       entry.playfieldWidth > entry.playerRadius * 2 &&
       entry.x >= 0 &&
       entry.x <= entry.playfieldWidth,

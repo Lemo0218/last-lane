@@ -10,12 +10,19 @@ it("returns an accepted replay witness for varied exact legal entry states", () 
     fc.property(
       fc.integer({ min: 1, max: 20 }),
       fc.integer({ min: 50, max: 500 }),
+      fc.integer({ min: 0, max: 500 }),
       fc.integer({ min: 0, max: 10 }),
       fc.integer({ min: -20, max: 20 }),
       fc.integer({ min: 0, max: 4 }),
       fc.integer({ min: 0, max: 4 }),
-      (squad, width, radius, velocity, troop, recovery) => {
-        const x = Math.floor(width / 2)
+      fc.integer({ min: 0, max: 2 }),
+      fc.boolean(),
+      (squad, width, xSeed, radius, velocity, troop, recovery, precedingCount, obstructed) => {
+        const x = xSeed % (width + 1)
+        const preceding = [
+          { id: "older", exitX: x - 1, exitVelocity: 0, survived: true },
+          { id: "latest", exitX: x, exitVelocity: velocity, survived: true },
+        ]
         const state: EntryState = {
           squad,
           upgrades: { troop, damage: troop, fireRate: recovery, recovery },
@@ -24,18 +31,17 @@ it("returns an accepted replay witness for varied exact legal entry states", () 
           playfieldWidth: width,
           playerRadius: radius,
           blockerRadius: radius,
-          precedingSegments: [
-            { id: "older", exitX: x - 1, exitVelocity: 0, survived: true },
-            { id: "latest", exitX: x, exitVelocity: velocity, survived: true },
-          ],
+          precedingSegments: preceding.slice(2 - precedingCount),
         }
         const segment: WaveSegment = {
           id: "varied",
           horizonMs: 6_000,
-          blockers: [],
+          blockers: obstructed
+            ? [{ fromMs: 2_000, toMs: 2_100, minX: 0, maxX: width / 4, damage: 1 }]
+            : [],
           gates: [{ id: "choice", atMs: 1_000, x, radius: radius + 1, kind: "recovery", level: 1 }],
         }
-        const result = solveWave(state, segment)
+        const result = solveWave(state, segment, { clock: { now: () => 0 } })
         expect(result.kind).toBe("accepted")
         if (result.kind === "accepted") {
           const replay = replayWitness(state, segment, result.witness)
@@ -63,11 +69,11 @@ it("composes recovery choice, entrance, and boss with one surviving offered choi
     horizonMs: 12_000,
     blockers: [{ fromMs: 4_000, toMs: 8_000, minX: 0, maxX: 44, damage: 2 }],
     gates: [
-      { id: "recover", atMs: 1_000, x: 75, radius: 8, kind: "recovery", level: 2 },
-      { id: "reward", atMs: 1_000, x: 25, radius: 8, kind: "damage", level: 2 },
+      { id: "recover", atMs: 1_000, x: 100, radius: 8, kind: "recovery", level: 2 },
+      { id: "reward", atMs: 1_000, x: 0, radius: 8, kind: "damage", level: 2 },
     ],
   }
-  const result = solveWave(state, composed)
+  const result = solveWave(state, composed, { clock: { now: () => 0 } })
   expect(result.kind).toBe("accepted")
   if (result.kind === "accepted") {
     const replay = replayWitness(state, composed, result.witness)
