@@ -81,6 +81,7 @@ export const GameCanvas = ({
         const distanceDelta = Math.max(0, Number(state.distance) - previousDistance)
         scoreCounters = accumulateRunScore(scoreCounters, distanceDelta, state.events)
         audio.play(state.events)
+        if (state.status !== "running") break
       }
       const state = runtime.active.production.simulation
       if (!finished && state.status !== "running") {

@@ -83,4 +83,61 @@ describe("submit score handler", () => {
       stored,
     )
   })
+
+  it("settles simultaneous identical retries on the earliest server minute", async () => {
+    const ticket = issueTicket(
+      secret,
+      0,
+      () => "handler-nonce-002",
+      () => 1,
+    )
+    const transcript = { entries: [{ tick: 0, move: "N" }], endTick: 844 }
+    const adapter = new InMemoryBlobAdapter()
+    const store = new RankingStore(adapter)
+    const payload = { ticket, nickname: "Runner", transcript }
+    const [early, late] = await Promise.all([
+      submitScore(request(payload), {
+        secret,
+        store,
+        now: () => 60_001,
+        limiter: limiter(),
+      }),
+      submitScore(request(payload), {
+        secret,
+        store,
+        now: () => 120_001,
+        limiter: limiter(),
+      }),
+    ])
+    const nonce = verifyTicket(ticket.token, secret, 1, true).nonce
+    const stored = JSON.parse((await adapter.get(`runs/${nonce}.json`))?.body ?? "null")
+    expect([early.status, late.status]).toEqual([200, 200])
+    expect(stored.submittedAt).toBe("1970-01-01T00:01:00.000Z")
+  })
+
+  it("rejects a simultaneous conflicting nickname for one nonce", async () => {
+    const ticket = issueTicket(
+      secret,
+      0,
+      () => "handler-nonce-003",
+      () => 1,
+    )
+    const transcript = { entries: [{ tick: 0, move: "N" }], endTick: 844 }
+    const store = new RankingStore(new InMemoryBlobAdapter())
+    const responses = await Promise.all([
+      submitScore(request({ ticket, nickname: "First", transcript }), {
+        secret,
+        store,
+        now: () => 1,
+        limiter: limiter(),
+      }),
+      submitScore(request({ ticket, nickname: "Second", transcript }), {
+        secret,
+        store,
+        now: () => 1,
+        limiter: limiter(),
+      }),
+    ])
+    expect(responses.map((response) => response.status).sort()).toEqual([200, 409])
+  })
 })

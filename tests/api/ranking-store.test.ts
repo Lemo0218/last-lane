@@ -16,6 +16,64 @@ describe("ranking store", () => {
       nonce: "b",
     })
     expect(high.localeCompare(low)).toBe(-1)
+    const longer = scorePath({
+      score: 20,
+      survivalTicks: 3,
+      submittedAt: "2026-01-01T00:00:00.000Z",
+      nonce: "b",
+    })
+    const earlier = scorePath({
+      score: 20,
+      survivalTicks: 3,
+      submittedAt: "2025-12-31T23:59:00.000Z",
+      nonce: "z",
+    })
+    const stableNonce = scorePath({
+      score: 20,
+      survivalTicks: 3,
+      submittedAt: "2025-12-31T23:59:00.000Z",
+      nonce: "a",
+    })
+    expect(longer.localeCompare(high)).toBe(-1)
+    expect(earlier.localeCompare(longer)).toBe(-1)
+    expect(stableNonce.localeCompare(earlier)).toBe(-1)
+  })
+
+  it("adopts the winning pending timestamp for concurrent identical publication", async () => {
+    const adapter = new InMemoryBlobAdapter()
+    const store = new RankingStore(adapter)
+    const base = {
+      nonce: "concurrent",
+      ticketDigest: "c".repeat(64),
+      nickname: "Neo",
+      score: 7,
+      survivalTicks: 8,
+    }
+    const early = { ...base, submittedAt: "2026-01-01T00:00:00.000Z" }
+    const late = { ...base, submittedAt: "2026-01-01T00:01:00.000Z" }
+    const [first, second] = await Promise.all([store.publish(early), store.publish(late)])
+    expect(first).toEqual(early)
+    expect(second).toEqual(early)
+    expect(await store.repairExisting(late)).toEqual(early)
+  })
+
+  it("rejects a concurrent conflicting result for the same nonce", async () => {
+    const adapter = new InMemoryBlobAdapter()
+    const store = new RankingStore(adapter)
+    const run = {
+      nonce: "collision",
+      ticketDigest: "d".repeat(64),
+      nickname: "Neo",
+      score: 7,
+      survivalTicks: 8,
+      submittedAt: "2026-01-01T00:00:00.000Z",
+    }
+    const settled = await Promise.allSettled([
+      store.publish(run),
+      store.publish({ ...run, ticketDigest: "e".repeat(64) }),
+    ])
+    expect(settled.filter((result) => result.status === "fulfilled")).toHaveLength(1)
+    expect(settled.filter((result) => result.status === "rejected")).toHaveLength(1)
   })
 
   it("publishes pending then audit and remains idempotent", async () => {

@@ -1,5 +1,6 @@
 export const STEP_MS = 10 as const
 export const RUN_DURATION_MS = 180_000 as const
+export const RANKED_RUN_LIMIT_MS = 600_000 as const
 export const DIFFICULTY_TIER_MS = 30_000 as const
 export const BOSS_EVERY_TIERS = 2 as const
 export const MAX_ENTITIES = 128 as const

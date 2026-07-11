@@ -43,10 +43,10 @@ export const submitScore = async (
     }
     const store = dependencies.store
     const repaired = await store.repairExisting(run)
-    const acceptedRun = repaired ?? run
+    let acceptedRun = repaired ?? run
     if (repaired === undefined) {
       if (now > ticket.submissionDeadline) throw new TicketError("expired-ticket")
-      await store.publish(run)
+      acceptedRun = await store.publish(run)
     }
     const board = await store.leaderboard()
     return json({

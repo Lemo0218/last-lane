@@ -116,12 +116,13 @@ export class RankingStore {
     await this.project(storedRun, pendingPath)
     return storedRun
   }
-  async publish(run: RankedRun): Promise<void> {
+  async publish(run: RankedRun): Promise<RankedRun> {
     const runPath = `runs/${run.nonce}.json`
     const existing = await this.adapter.get(runPath)
     if (existing !== undefined) {
-      if (!same(existing, run)) throw new RankingConflictError()
-      return
+      const storedRun = rankedRunSchema.parse(JSON.parse(existing.body))
+      if (!sameResult(storedRun, run)) throw new RankingConflictError()
+      return storedRun
     }
     const pendingPath = `pending/${run.nonce}.json`
     try {
@@ -129,9 +130,20 @@ export class RankingStore {
     } catch (error) {
       if (!(error instanceof BlobConflictError)) throw error
       const pending = await this.adapter.get(pendingPath)
-      if (pending === undefined || !same(pending, run)) throw new RankingConflictError()
+      if (pending === undefined) {
+        const completed = await this.adapter.get(runPath)
+        if (completed === undefined) throw new RankingConflictError()
+        const storedRun = rankedRunSchema.parse(JSON.parse(completed.body))
+        if (!sameResult(storedRun, run)) throw new RankingConflictError()
+        return storedRun
+      }
+      const storedRun = rankedRunSchema.parse(JSON.parse(pending.body))
+      if (!sameResult(storedRun, run)) throw new RankingConflictError()
+      await this.project(storedRun, pendingPath)
+      return storedRun
     }
     await this.project(run, pendingPath)
+    return run
   }
   async project(run: RankedRun, pendingPath = `pending/${run.nonce}.json`): Promise<void> {
     await this.putMatching(scorePath(run), run)

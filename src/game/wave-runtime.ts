@@ -1,9 +1,10 @@
+import { RANKED_RUN_LIMIT_MS } from "./config"
 import type { ProductionWaveState } from "./production-wave"
 import { createProductionWaveState, stepProductionWave } from "./production-wave"
 import { generateWaveCandidate } from "./segment-generator"
 import { type SolverResult, solveWave } from "./solver"
 import type { SimulationInput, SimulationState, UpgradeLevels } from "./types"
-import type { CommittedSegment, EntryState, WaveSegment } from "./waves"
+import type { CommittedSegment, EntryState, WaveSegment, WaveWitness } from "./waves"
 
 export type WaveRuntimeDependencies = Readonly<{
   candidate: (entry: EntryState, index: number) => WaveSegment
@@ -16,6 +17,7 @@ export type ActiveWave = Readonly<{
   index: number
   usedFallback: boolean
   elapsedBeforeMs: number
+  witness: WaveWitness
 }>
 
 export type WaveRuntime = Readonly<{
@@ -58,6 +60,7 @@ const activate = (
     index,
     usedFallback: result.kind === "fallback",
     elapsedBeforeMs,
+    witness: result.witness,
   }
 }
 
@@ -69,12 +72,26 @@ const runtimeFrom = (
 ): WaveRuntime => ({
   active,
   step: (input) => {
-    const production = stepProductionWave(
+    const stepped = stepProductionWave(
       entryOf(active.production.simulation, preceding),
       active.segment,
       active.production,
       input,
     )
+    const production =
+      active.elapsedBeforeMs + stepped.atMs >= RANKED_RUN_LIMIT_MS
+        ? {
+            ...stepped,
+            simulation: {
+              ...stepped.simulation,
+              squad: 0,
+              status: "game-over" as const,
+              events: [...stepped.simulation.events, { kind: "game-over" as const }],
+            },
+          }
+        : stepped
+    if (production.simulation.status === "game-over")
+      return runtimeFrom(dependencies, { ...active, production }, preceding, seed)
     if (production.atMs < active.segment.horizonMs)
       return runtimeFrom(dependencies, { ...active, production }, preceding, seed)
     const committed: CommittedSegment = {
