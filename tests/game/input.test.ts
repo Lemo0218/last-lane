@@ -62,4 +62,36 @@ describe("game input", () => {
     expect(controller.current().moveX).toBe(0)
     controller.dispose()
   })
+
+  it("ignores secondary pointers and preserves held keyboard chords", () => {
+    // Given: one controller receives multi-pointer and chorded keyboard input
+    const element = document.createElement("div")
+    const controller = createInputController(element)
+    const pointer = (type: string, pointerId: number, clientX: number): void => {
+      const event = new Event(type, { bubbles: true })
+      Object.defineProperties(event, {
+        pointerId: { value: pointerId },
+        clientX: { value: clientX },
+      })
+      element.dispatchEvent(event)
+    }
+
+    // When: another finger interferes and opposite keys overlap
+    pointer("pointerdown", 1, 100)
+    pointer("pointermove", 2, 180)
+    pointer("pointermove", 1, 50)
+    pointer("pointerup", 2, 180)
+
+    // Then: only the owning pointer releases control and key release preserves the held direction
+    expect(controller.current().moveX).toBe(-1)
+    pointer("pointerup", 1, 50)
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "a" }))
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "d" }))
+    expect(controller.current().moveX).toBe(0)
+    window.dispatchEvent(new KeyboardEvent("keyup", { key: "d" }))
+    expect(controller.current().moveX).toBe(-1)
+    window.dispatchEvent(new Event("blur"))
+    expect(controller.current().moveX).toBe(0)
+    controller.dispose()
+  })
 })

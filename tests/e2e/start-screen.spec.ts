@@ -14,7 +14,7 @@ test("plays with the touch joystick and pauses and resumes on mobile", async ({ 
   // Given: a player starts the Canvas game
   await page.goto("/")
   await page.getByRole("button", { name: "게임 시작" }).click()
-  const joystick = page.getByRole("application", { name: "이동 조이스틱" })
+  const joystick = page.getByRole("slider", { name: "이동 조이스틱" })
   const bounds = await joystick.boundingBox()
   expect(bounds).not.toBeNull()
   if (bounds === null) return
@@ -42,7 +42,7 @@ test("materializes boss combat and moves through touch pointer input", async ({ 
   await page.goto("/?testMode=boss")
   await page.getByRole("button", { name: "게임 시작" }).click()
   const game = page.locator(".game-shell")
-  const joystick = page.getByRole("application", { name: "이동 조이스틱" })
+  const joystick = page.getByRole("slider", { name: "이동 조이스틱" })
   const initialX = Number(await game.getAttribute("data-player-x"))
 
   // When: touch pointer events drag the virtual joystick left
@@ -69,6 +69,12 @@ test("auto-fire kills a basic zombie and increases the browser score", async ({ 
   await page.goto("/")
   await page.getByRole("button", { name: "게임 시작" }).click()
   const game = page.locator(".game-shell")
+  const joystick = page.getByRole("slider", { name: "이동 조이스틱" })
+  await expect(game).toHaveAttribute("data-gates", "1")
+  await joystick.dispatchEvent("pointerdown", { pointerId: 11, pointerType: "touch", clientX: 180 })
+  await joystick.dispatchEvent("pointermove", { pointerId: 11, pointerType: "touch", clientX: 110 })
+  await page.waitForTimeout(500)
+  await joystick.dispatchEvent("pointerup", { pointerId: 11, pointerType: "touch", clientX: 110 })
 
   // When: the first blocker materializes as a basic zombie
   await expect
@@ -77,4 +83,7 @@ test("auto-fire kills a basic zombie and increases the browser score", async ({ 
 
   // Then: the real kill is reflected in observable score telemetry
   await expect.poll(async () => Number(await game.getAttribute("data-score"))).toBeGreaterThan(100)
+  await expect
+    .poll(async () => Number(await game.getAttribute("data-collected-gates")), { timeout: 6_000 })
+    .toBeGreaterThan(0)
 })

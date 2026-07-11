@@ -79,6 +79,25 @@ export const renderGame = (
       roadLeft + 8,
       72,
     )
+    for (const gate of active.segment.gates) {
+      if (
+        active.production.collectedGateIds.has(gate.id) ||
+        active.production.atMs > gate.atMs + 500
+      )
+        continue
+      const approach = Math.max(0, Math.min(1, 1 - (gate.atMs - active.production.atMs) / 2_000))
+      const x = toX(gate.x)
+      const y = height * (0.18 + approach * 0.52)
+      const halfWidth = Math.max(18, (gate.radius / WORLD_MAX_X) * roadWidth)
+      context.fillStyle = "rgba(40,220,210,.28)"
+      context.fillRect(x - halfWidth, y - 20, halfWidth * 2, 40)
+      context.strokeStyle = "#71fff5"
+      context.strokeRect(x - halfWidth, y - 20, halfWidth * 2, 40)
+      context.fillStyle = "#fff"
+      context.font = "700 11px sans-serif"
+      context.textAlign = "center"
+      context.fillText(`${gate.kind.toUpperCase()} +${gate.level}`, x, y + 4)
+    }
     for (const blocker of active.segment.blockers) {
       if (blocker.fromMs - active.production.atMs > 900 || blocker.toMs < active.production.atMs)
         continue

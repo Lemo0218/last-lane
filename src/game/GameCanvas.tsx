@@ -23,6 +23,8 @@ type Telemetry = Readonly<{
   projectiles: number
   boss: boolean
   kills: number
+  gates: number
+  collectedGates: number
 }>
 const INITIAL_TELEMETRY: Telemetry = {
   playerX: 500,
@@ -31,9 +33,15 @@ const INITIAL_TELEMETRY: Telemetry = {
   projectiles: 0,
   boss: false,
   kills: 0,
+  gates: 0,
+  collectedGates: 0,
 }
 export const scoreForCombat = (state: SimulationState, kills: number): number =>
   Math.floor(Number(state.distance) / 8) + kills * 100 + state.combo * 25
+
+const reportAudioFailure = (error: unknown): void => {
+  console.warn("게임 오디오를 사용할 수 없습니다.", error instanceof Error ? error.message : error)
+}
 
 const statsOf = (state: SimulationState, kills: number, active: ActiveWave): HudStats => ({
   score: scoreForCombat(state, kills),
@@ -64,12 +72,17 @@ export const GameCanvas = ({
     const input = createInputController(joystick)
     const audio = audioFactory()
     audioRef.current = audio
-    const deterministicBoss = new URLSearchParams(window.location.search).get("testMode") === "boss"
+    const deterministicBoss =
+      import.meta.env.DEV && new URLSearchParams(window.location.search).get("testMode") === "boss"
     let runtime = createWaveRuntime(undefined, deterministicBoss ? 4 : 0)
     let frame = 0
     let clock: FrameClock = { previous: performance.now(), accumulator: 0 }
     let kills = 0
     let visible = !document.hidden
+    let metrics = resizeCanvas(canvas)
+    const resize = (): void => {
+      metrics = resizeCanvas(canvas)
+    }
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches
     const draw = (now: number): void => {
       const advanced = advanceFrame(clock, now, visible && !pausedRef.current)
@@ -81,7 +94,6 @@ export const GameCanvas = ({
         audio.play(state.events)
       }
       const state = runtime.active.production.simulation
-      const metrics = resizeCanvas(canvas)
       if (context !== null) renderGame(context, state, metrics, reducedMotion, runtime.active)
       if (advanced.steps > 0) {
         setStats(statsOf(state, kills, runtime.active))
@@ -92,6 +104,10 @@ export const GameCanvas = ({
           projectiles: state.projectiles.length,
           boss: state.zombies.some((zombie) => zombie.kind === "boss"),
           kills,
+          gates: runtime.active.segment.gates.filter(
+            (gate) => !runtime.active.production.collectedGateIds.has(gate.id),
+          ).length,
+          collectedGates: runtime.active.production.collectedGateIds.size,
         })
       }
       frame = requestAnimationFrame(draw)
@@ -101,17 +117,19 @@ export const GameCanvas = ({
       clock = { previous: performance.now(), accumulator: 0 }
     }
     const unlock = (): void => {
-      void audio.unlock()
+      void audio.unlock().catch(reportAudioFailure)
     }
     document.addEventListener("visibilitychange", visibility)
+    window.addEventListener("resize", resize)
     joystick.addEventListener("pointerdown", unlock, { once: true })
     frame = requestAnimationFrame(draw)
     return () => {
       cancelAnimationFrame(frame)
       input.dispose()
       document.removeEventListener("visibilitychange", visibility)
+      window.removeEventListener("resize", resize)
       joystick.removeEventListener("pointerdown", unlock)
-      void audio.close()
+      void audio.close().catch(reportAudioFailure)
       audioRef.current = null
     }
   }, [audioFactory])
@@ -124,13 +142,15 @@ export const GameCanvas = ({
   return (
     <main
       className="game-shell"
-      data-player-x={telemetry.playerX}
-      data-wave={telemetry.wave}
-      data-zombies={telemetry.zombies}
-      data-projectiles={telemetry.projectiles}
-      data-boss={telemetry.boss}
-      data-kills={telemetry.kills}
-      data-score={stats.score}
+      data-player-x={import.meta.env.DEV ? telemetry.playerX : undefined}
+      data-wave={import.meta.env.DEV ? telemetry.wave : undefined}
+      data-zombies={import.meta.env.DEV ? telemetry.zombies : undefined}
+      data-projectiles={import.meta.env.DEV ? telemetry.projectiles : undefined}
+      data-boss={import.meta.env.DEV ? telemetry.boss : undefined}
+      data-kills={import.meta.env.DEV ? telemetry.kills : undefined}
+      data-score={import.meta.env.DEV ? stats.score : undefined}
+      data-gates={import.meta.env.DEV ? telemetry.gates : undefined}
+      data-collected-gates={import.meta.env.DEV ? telemetry.collectedGates : undefined}
     >
       <output className="sr-only" aria-live="polite">
         웨이브 {telemetry.wave}, 좀비 {telemetry.zombies}, 탄환 {telemetry.projectiles}
@@ -142,17 +162,19 @@ export const GameCanvas = ({
         aria-label="라스트 레인 게임 화면"
         tabIndex={0}
       />
-      <div className="game-controls">
+      <div className="game-controls" inert={paused}>
         <button
           type="button"
           aria-label={paused ? "게임 계속" : "게임 일시정지"}
           onClick={togglePause}
+          disabled={paused}
         >
           {paused ? "▶" : "Ⅱ"}
         </button>
         <button
           type="button"
           aria-label={muted ? "소리 켜기" : "소리 끄기"}
+          disabled={paused}
           onClick={() =>
             setMuted((value) => {
               audioRef.current?.setMuted(!value)
@@ -163,9 +185,23 @@ export const GameCanvas = ({
           {muted ? "🔇" : "🔊"}
         </button>
       </div>
-      <div ref={joystickRef} className="joystick" role="application" aria-label="이동 조이스틱">
+      <div
+        ref={joystickRef}
+        className="joystick"
+        role="slider"
+        aria-label="이동 조이스틱"
+        aria-valuemin={-1}
+        aria-valuemax={1}
+        aria-valuenow={0}
+        aria-valuetext="중립"
+        aria-describedby="joystick-help"
+        tabIndex={0}
+      >
         <span className="joystick-knob" />
       </div>
+      <span id="joystick-help" className="sr-only">
+        좌우로 드래그하거나 방향키 또는 A D 키를 사용하세요.
+      </span>
       {paused ? <PauseMenu onResume={togglePause} /> : null}
     </main>
   )

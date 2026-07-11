@@ -15,37 +15,59 @@ export const movementForKey = (key: string): -1 | 0 | 1 => {
 export const createInputController = (element: HTMLElement): InputController => {
   let moveX: -1 | 0 | 1 = 0
   let origin = 0
-  let pointerActive = false
+  let activePointerId: number | undefined
+  const pressed = new Set<string>()
+  const updateKeyboard = (): void => {
+    const left = pressed.has("arrowleft") || pressed.has("a")
+    const right = pressed.has("arrowright") || pressed.has("d")
+    moveX = left === right ? 0 : left ? -1 : 1
+  }
+  const updateAria = (): void => {
+    element.setAttribute("aria-valuenow", String(moveX))
+    element.setAttribute("aria-valuetext", moveX === -1 ? "왼쪽" : moveX === 1 ? "오른쪽" : "중립")
+  }
   const reset = (): void => {
     moveX = 0
-    pointerActive = false
+    activePointerId = undefined
+    pressed.clear()
     element.style.setProperty("--joystick-x", "0px")
     element.removeAttribute("data-active")
+    updateAria()
   }
   const down = (event: PointerEvent): void => {
+    if (activePointerId !== undefined) return
     origin = event.clientX
     moveX = 0
-    pointerActive = true
+    activePointerId = event.pointerId
     element.setAttribute("data-active", "true")
     if (event.isTrusted) element.setPointerCapture?.(event.pointerId)
   }
   const move = (event: PointerEvent): void => {
-    if (pointerActive) {
+    if (event.pointerId === activePointerId) {
       moveX = quantizeHorizontal(event.clientX, origin)
       const displacement = Math.max(-42, Math.min(42, event.clientX - origin))
       element.style.setProperty("--joystick-x", `${displacement}px`)
+      updateAria()
     }
   }
-  const up = (): void => reset()
+  const up = (event: PointerEvent): void => {
+    if (event.pointerId === activePointerId) reset()
+  }
   const keydown = (event: KeyboardEvent): void => {
     const movement = movementForKey(event.key)
     if (movement !== 0) {
       event.preventDefault()
-      moveX = movement
+      pressed.add(event.key.toLowerCase())
+      updateKeyboard()
+      updateAria()
     }
   }
   const keyup = (event: KeyboardEvent): void => {
-    if (movementForKey(event.key) !== 0) moveX = 0
+    if (movementForKey(event.key) !== 0) {
+      pressed.delete(event.key.toLowerCase())
+      updateKeyboard()
+      updateAria()
+    }
   }
   element.addEventListener("pointerdown", down)
   element.addEventListener("pointermove", move)
@@ -53,6 +75,8 @@ export const createInputController = (element: HTMLElement): InputController => 
   element.addEventListener("pointercancel", up)
   window.addEventListener("keydown", keydown)
   window.addEventListener("keyup", keyup)
+  window.addEventListener("blur", reset)
+  updateAria()
   return {
     current: () => ({ moveX, paused: false }),
     dispose: () => {
@@ -62,6 +86,7 @@ export const createInputController = (element: HTMLElement): InputController => 
       element.removeEventListener("pointercancel", up)
       window.removeEventListener("keydown", keydown)
       window.removeEventListener("keyup", keyup)
+      window.removeEventListener("blur", reset)
       reset()
     },
   }

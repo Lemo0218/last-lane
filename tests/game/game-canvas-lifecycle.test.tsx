@@ -46,6 +46,7 @@ describe("GameCanvas lifecycle", () => {
     const canvas = screen.getByLabelText("라스트 레인 게임 화면")
     vi.spyOn(canvas, "getBoundingClientRect").mockReturnValue(new DOMRect(0, 0, 200, 300))
     vi.stubGlobal("devicePixelRatio", 3)
+    window.dispatchEvent(new Event("resize"))
 
     // When: time advances, the page backgrounds, and the joystick receives a gesture
     frameCallback(100)
@@ -55,7 +56,7 @@ describe("GameCanvas lifecycle", () => {
     hidden = false
     document.dispatchEvent(new Event("visibilitychange"))
     frameCallback(20_010)
-    fireEvent.pointerDown(screen.getByRole("application", { name: "이동 조이스틱" }), {
+    fireEvent.pointerDown(screen.getByRole("slider", { name: "이동 조이스틱" }), {
       pointerId: 1,
       clientX: 100,
     })

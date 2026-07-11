@@ -73,9 +73,10 @@ export const stepProductionWave = (
   const collidedWaveGates = segment.gates.filter(
     (gate) =>
       !state.collectedGateIds.has(gate.id) &&
-      gate.atMs <= atMs &&
-      atMs < gate.atMs + STEP_MS &&
-      Math.abs(gate.x - playerX) <= gate.radius + entry.playerRadius,
+      gate.atMs - 350 <= atMs &&
+      atMs <= gate.atMs + 500 &&
+      gate.x + gate.radius + entry.playerRadius >= Math.min(beforeX, playerX) &&
+      gate.x - gate.radius - entry.playerRadius <= Math.max(beforeX, playerX),
   )
   const productionGates: readonly Gate[] = collidedWaveGates.map((gate, index) => ({
     id: index + 1,
@@ -117,6 +118,7 @@ export const stepProductionWave = (
       recoveryEveryMs: gateResult.recoveryEveryMs,
       recoveryAmount: gateResult.recoveryAmount,
       gates: [],
+      events: [...stepped.events, ...gateResult.events],
     },
     atMs,
     collectedGateIds: collected,

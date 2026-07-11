@@ -24,7 +24,7 @@ export const generateWaveCandidate = (entry: EntryState, index: number): WaveSeg
       {
         id: `gate-${index + 1}`,
         atMs: 4_200,
-        x: leftLane ? entry.playfieldWidth * 0.25 : entry.playfieldWidth * 0.75,
+        x: leftLane ? 0 : entry.playfieldWidth,
         radius: 50,
         kind: index % 3 === 0 ? "troop" : index % 3 === 1 ? "damage" : "fire-rate",
         level: 1,

@@ -16,6 +16,39 @@ const witness: WaveWitness = {
 }
 
 describe("wave runtime", () => {
+  it("collects a swept gate during a forgiving approach window and preserves feedback", () => {
+    // Given: a gate scheduled between fixed production ticks
+    const entry: EntryState = {
+      squad: 3,
+      upgrades: { troop: 0, damage: 0, fireRate: 0, recovery: 0 },
+      x: 500,
+      velocity: 0,
+      playfieldWidth: 1000,
+      playerRadius: 12,
+      blockerRadius: 12,
+      precedingSegments: [],
+    }
+    const gated: WaveSegment = {
+      id: "wave-gate",
+      horizonMs: 6_000,
+      blockers: [],
+      gates: [{ id: "g1", atMs: 15, x: 500, radius: 30, kind: "damage", level: 1 }],
+    }
+
+    // When: production advances across the scheduled gate time
+    let production = createProductionWaveState(entry)
+    production = stepProductionWave(entry, gated, production, { moveX: 0, paused: false })
+    const feedback = production.simulation.events
+    production = stepProductionWave(entry, gated, production, { moveX: 0, paused: false })
+
+    // Then: collection is forgiving and its event survives the adapter
+    expect([...production.collectedGateIds]).toEqual(["g1"])
+    expect(feedback).toContainEqual({
+      kind: "gate-collected",
+      gateKind: "damage",
+      level: 1,
+    })
+  })
   it("kills a materialized basic zombie through real projectile collisions", () => {
     // Given: a basic wave with a reachable blocker enemy
     const entry: EntryState = {
