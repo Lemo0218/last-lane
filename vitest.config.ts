@@ -5,6 +5,7 @@ export default defineConfig({
   plugins: [react()],
   test: {
     environment: "jsdom",
+    include: ["**/*.test.{ts,tsx}", "tests/api/verifier.bench.ts"],
     exclude: ["tests/e2e/**", "node_modules/**", "dist/**"],
     setupFiles: ["./tests/setup.ts"],
   },

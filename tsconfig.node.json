@@ -14,8 +14,26 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noImplicitReturns": true,
+    "jsx": "react-jsx",
     "types": ["node"],
     "noEmit": true
   },
-  "include": ["vite.config.ts", "vitest.config.ts", "playwright.config.ts"]
+  "include": [
+    "vite.config.ts",
+    "vitest.config.ts",
+    "playwright.config.ts",
+    "api/**/*.ts",
+    "src/api/**/*.ts",
+    "src/server/**/*.ts",
+    "src/game/config.ts",
+    "src/game/gates.ts",
+    "src/game/rng.ts",
+    "src/game/run-status.ts",
+    "src/game/scoring.ts",
+    "src/game/simulation.ts",
+    "src/game/state-validation.ts",
+    "src/game/transcript.ts",
+    "src/game/types.ts",
+    "src/game/validation.ts"
+  ]
 }

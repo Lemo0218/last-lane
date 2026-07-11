@@ -1,7 +1,7 @@
 import { z } from "zod"
 
 export const transcriptEntrySchema = z.object({
-  tick: z.number().int().nonnegative().max(36_000),
+  tick: z.number().int().nonnegative().max(60_000),
   move: z.enum(["L", "N", "R"]),
 })
 export const transcriptSchema = z.array(transcriptEntrySchema).max(2_400)
