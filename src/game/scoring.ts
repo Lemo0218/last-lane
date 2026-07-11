@@ -18,14 +18,24 @@ export type ScoreBreakdown = Readonly<{
   total: number
 }>
 
-export const distanceScore = (distance: number): number => Math.floor(distance / 100)
-export const basicKillScore = (kills: number): number => kills * 100
-export const eliteScore = (kills: number): number => kills * 250
-export const bossScore = (kills: number): number => kills * 1000
-export const closeCallScore = (closeCalls: number): number => closeCalls * 50
+export const distanceScore = (distance: number): number =>
+  Math.floor(requireNatural("distance", distance) / 100)
+export const basicKillScore = (kills: number): number =>
+  requireSafeProduct("basic kill score", requireNatural("basic kills", kills), 100)
+export const eliteScore = (kills: number): number =>
+  requireSafeProduct("elite score", requireNatural("elite kills", kills), 250)
+export const bossScore = (kills: number): number =>
+  requireSafeProduct("boss score", requireNatural("bosses", kills), 1000)
+export const closeCallScore = (closeCalls: number): number =>
+  requireSafeProduct("close call score", requireNatural("close calls", closeCalls), 50)
 
-export const survivalMultiplierPermille = (survivedMs: number): number =>
-  1000 + Math.floor(survivedMs / 30_000) * 250
+export const survivalMultiplierPermille = (survivedMs: number): number => {
+  const tiers = Math.floor(requireNatural("survived milliseconds", survivedMs) / 30_000)
+  return requireSafeSum("survival multiplier", [
+    1000,
+    requireSafeProduct("survival bonus", tiers, 250),
+  ])
+}
 
 export const scoreRun = (metrics: RunMetrics): ScoreBreakdown => {
   const distance = distanceScore(metrics.distance)
@@ -33,8 +43,15 @@ export const scoreRun = (metrics: RunMetrics): ScoreBreakdown => {
   const elites = eliteScore(metrics.eliteKills)
   const bosses = bossScore(metrics.bosses)
   const closeCalls = closeCallScore(metrics.closeCalls)
-  const subtotal = distance + basicKills + elites + bosses + closeCalls
+  const subtotal = requireSafeSum("score subtotal", [
+    distance,
+    basicKills,
+    elites,
+    bosses,
+    closeCalls,
+  ])
   const multiplier = survivalMultiplierPermille(metrics.survivedMs)
+  const scaledTotal = requireSafeProduct("scaled total", subtotal, multiplier)
   return {
     distance,
     basicKills,
@@ -43,6 +60,8 @@ export const scoreRun = (metrics: RunMetrics): ScoreBreakdown => {
     closeCalls,
     subtotal,
     survivalMultiplierPermille: multiplier,
-    total: Math.floor((subtotal * multiplier) / 1000),
+    total: Math.floor(scaledTotal / 1000),
   }
 }
+
+import { requireNatural, requireSafeProduct, requireSafeSum } from "./validation"

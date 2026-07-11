@@ -43,4 +43,34 @@ describe("run scoring", () => {
       total: 3715,
     })
   })
+
+  it.each([
+    -1,
+    1.5,
+    Number.MAX_SAFE_INTEGER,
+  ])("Given invalid distance %s When scored Then rejects unsafe metrics", (distance) => {
+    expect(() =>
+      scoreRun({
+        distance,
+        basicKills: 3,
+        eliteKills: 2,
+        bosses: 1,
+        closeCalls: 4,
+        survivedMs: 90_000,
+      }),
+    ).toThrow()
+  })
+
+  it("Given valid metrics When scored Then every component is a safe integer", () => {
+    const breakdown = scoreRun({
+      distance: 100,
+      basicKills: 1,
+      eliteKills: 1,
+      bosses: 1,
+      closeCalls: 1,
+      survivedMs: 30_000,
+    })
+
+    expect(Object.values(breakdown).every(Number.isSafeInteger)).toBe(true)
+  })
 })
