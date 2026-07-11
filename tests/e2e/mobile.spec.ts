@@ -32,3 +32,26 @@ test("keeps touch controls responsive and frame work bounded at the mobile maxim
   expect(Number(await game.getAttribute("data-max-effects"))).toBe(32)
   await expect(game).toHaveAttribute("data-functional-status", "running")
 })
+
+test("shows another soldier after collecting a troop gate", async ({ page }) => {
+  // Given: a new squad moving toward the first troop gate
+  await page.goto("/")
+  await page.getByRole("button", { name: "확인" }).click()
+  await page.getByRole("button", { name: "게임 시작" }).click()
+  const game = page.locator(".game-shell")
+  const joystick = page.getByRole("slider", { name: "이동 조이스틱" })
+  const initialSoldiers = Number(await game.getAttribute("data-visible-soldiers"))
+
+  // When: touch steering crosses the troop gate on the left
+  await joystick.dispatchEvent("pointerdown", { pointerId: 31, pointerType: "touch", clientX: 195 })
+  await joystick.dispatchEvent("pointermove", { pointerId: 31, pointerType: "touch", clientX: 100 })
+  await expect
+    .poll(async () => Number(await game.getAttribute("data-collected-gates")), {
+      timeout: 8_000,
+    })
+    .toBeGreaterThan(0)
+  await joystick.dispatchEvent("pointerup", { pointerId: 31, pointerType: "touch", clientX: 100 })
+
+  // Then: telemetry reports one more individually rendered squad member
+  await expect(game).toHaveAttribute("data-visible-soldiers", String(initialSoldiers + 1))
+})

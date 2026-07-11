@@ -12,6 +12,7 @@ export type WaveRuntimeDependencies = Readonly<{
 }>
 
 export type ActiveWave = Readonly<{
+  entry: EntryState
   segment: WaveSegment
   production: ProductionWaveState
   index: number
@@ -55,6 +56,7 @@ const activate = (
 ): ActiveWave => {
   const result = dependencies.solve(entry, dependencies.candidate(entry, index))
   return {
+    entry,
     segment: result.segment,
     production: createProductionWaveState(entry, seed),
     index,
@@ -72,12 +74,7 @@ const runtimeFrom = (
 ): WaveRuntime => ({
   active,
   step: (input) => {
-    const stepped = stepProductionWave(
-      entryOf(active.production.simulation, preceding),
-      active.segment,
-      active.production,
-      input,
-    )
+    const stepped = stepProductionWave(active.entry, active.segment, active.production, input)
     const production =
       active.elapsedBeforeMs + stepped.atMs >= RANKED_RUN_LIMIT_MS
         ? {

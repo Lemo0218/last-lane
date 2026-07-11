@@ -222,6 +222,7 @@ export const GameCanvas = ({
       data-score={GAME_E2E_ENABLED ? stats.score : undefined}
       data-gates={GAME_E2E_ENABLED ? telemetry.gates : undefined}
       data-collected-gates={GAME_E2E_ENABLED ? telemetry.collectedGates : undefined}
+      data-visible-soldiers={GAME_E2E_ENABLED ? Math.min(24, stats.squad) : undefined}
     >
       <output className="sr-only" aria-live="polite">
         웨이브 {telemetry.wave}, 좀비 {telemetry.zombies}, 탄환 {telemetry.projectiles}

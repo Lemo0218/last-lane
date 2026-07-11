@@ -17,6 +17,7 @@ it("accepts a generated ten-minute witness below deployment ceilings", () => {
   const ordered = [...samples].sort((left, right) => left - right)
   const median = ordered[1]
   const maximum = ordered[2]
+  console.info("verifier-60k-ms", { samples, median, maximum })
   expect(median).toBeDefined()
   expect(maximum).toBeDefined()
   expect(median).toBeLessThan(LOCAL_CEILING_MS)

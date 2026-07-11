@@ -57,14 +57,18 @@ export const stepProductionWave = (
       blocker.fromMs > state.atMs &&
       !state.spawnedBlockerIds.has(`${segment.id}:${index}`),
   )
-  const kind = zombieKind(segment)
-  const spawned: Zombie[] = activating.map((blocker, index) => ({
-    id: state.simulation.nextEntityId + index,
-    kind,
-    x: position(Math.round((blocker.minX + blocker.maxX) / 2)),
-    hp: kind === "boss" ? 30 : kind === "elite" ? 20 : 10,
-    damage: kind === "boss" ? 2 : 1,
-  }))
+  const spawned: Zombie[] = []
+  if (activating.length > 0) {
+    const kind = zombieKind(segment)
+    for (const blocker of activating)
+      spawned.push({
+        id: state.simulation.nextEntityId + spawned.length,
+        kind,
+        x: position(Math.round((blocker.minX + blocker.maxX) / 2)),
+        hp: kind === "boss" ? 30 : kind === "elite" ? 20 : 10,
+        damage: kind === "boss" ? 2 : 1,
+      })
+  }
   const stepped = stepSimulation(
     {
       ...state.simulation,
@@ -92,9 +96,9 @@ export const stepProductionWave = (
   }))
   const gateResult = collectGates({ ...stepped, gates: productionGates }, playerX)
   let squad = gateResult.squad
-  const closeCalls = new Set(state.closeCallBlockerIds)
-  const nearMissCandidates = new Set(state.nearMissCandidateIds)
-  const collidedBlockers = new Set(state.collidedBlockerIds)
+  let closeCalls: Set<string> | undefined
+  let nearMissCandidates: Set<string> | undefined
+  let collidedBlockers: Set<string> | undefined
   const closeCallEvents: Array<Readonly<{ kind: "close-call"; blockerId: string }>> = []
   for (const [index, blocker] of segment.blockers.entries()) {
     const radius = entry.playerRadius + entry.blockerRadius
@@ -106,36 +110,45 @@ export const stepProductionWave = (
       Math.min(beforeX, playerX) - radius <= blocker.maxX
     if (collides) {
       squad = Math.max(0, squad - blocker.damage)
+      collidedBlockers ??= new Set(state.collidedBlockerIds)
       collidedBlockers.add(blockerId)
+      nearMissCandidates ??= new Set(state.nearMissCandidateIds)
       nearMissCandidates.delete(blockerId)
     }
     const nearRadius = radius + 24
     if (
       active &&
       !collides &&
-      !collidedBlockers.has(blockerId) &&
-      !closeCalls.has(blockerId) &&
+      !(collidedBlockers?.has(blockerId) ?? state.collidedBlockerIds.has(blockerId)) &&
+      !(closeCalls?.has(blockerId) ?? state.closeCallBlockerIds.has(blockerId)) &&
       Math.max(beforeX, playerX) + nearRadius >= blocker.minX &&
       Math.min(beforeX, playerX) - nearRadius <= blocker.maxX
     ) {
+      nearMissCandidates ??= new Set(state.nearMissCandidateIds)
       nearMissCandidates.add(blockerId)
     }
     if (
       atMs > blocker.toMs + STEP_MS &&
-      nearMissCandidates.has(blockerId) &&
-      !collidedBlockers.has(blockerId)
+      (nearMissCandidates?.has(blockerId) ?? state.nearMissCandidateIds.has(blockerId)) &&
+      !(collidedBlockers?.has(blockerId) ?? state.collidedBlockerIds.has(blockerId))
     ) {
+      nearMissCandidates ??= new Set(state.nearMissCandidateIds)
       nearMissCandidates.delete(blockerId)
+      closeCalls ??= new Set(state.closeCallBlockerIds)
       closeCalls.add(blockerId)
       closeCallEvents.push({ kind: "close-call", blockerId })
     }
   }
-  const collected = new Set(state.collectedGateIds)
-  for (const gate of collidedWaveGates) collected.add(gate.id)
-  const spawnedBlockers = new Set(state.spawnedBlockerIds)
-  for (const blocker of activating) {
-    const index = segment.blockers.indexOf(blocker)
-    spawnedBlockers.add(`${segment.id}:${index}`)
+  let collected: Set<string> | undefined
+  for (const gate of collidedWaveGates) {
+    collected ??= new Set(state.collectedGateIds)
+    collected.add(gate.id)
+  }
+  let spawnedBlockers: Set<string> | undefined
+  if (activating.length > 0) {
+    spawnedBlockers = new Set(state.spawnedBlockerIds)
+    for (const [index, blocker] of segment.blockers.entries())
+      if (activating.includes(blocker)) spawnedBlockers.add(`${segment.id}:${index}`)
   }
   return {
     simulation: {
@@ -155,10 +168,10 @@ export const stepProductionWave = (
       events: [...stepped.events, ...gateResult.events, ...closeCallEvents],
     },
     atMs,
-    collectedGateIds: collected,
-    spawnedBlockerIds: spawnedBlockers,
-    closeCallBlockerIds: closeCalls,
-    nearMissCandidateIds: nearMissCandidates,
-    collidedBlockerIds: collidedBlockers,
+    collectedGateIds: collected ?? state.collectedGateIds,
+    spawnedBlockerIds: spawnedBlockers ?? state.spawnedBlockerIds,
+    closeCallBlockerIds: closeCalls ?? state.closeCallBlockerIds,
+    nearMissCandidateIds: nearMissCandidates ?? state.nearMissCandidateIds,
+    collidedBlockerIds: collidedBlockers ?? state.collidedBlockerIds,
   }
 }

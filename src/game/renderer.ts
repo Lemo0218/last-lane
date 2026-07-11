@@ -1,7 +1,9 @@
 import { difficultyAt, WORLD_MAX_X } from "./config"
 import type { VisibleEffect } from "./effect-pool"
+import { renderSquad } from "./squad-renderer"
 import type { SimulationState } from "./types"
 import type { ActiveWave } from "./wave-runtime"
+import { renderZombie } from "./zombie-renderer"
 
 export type CanvasMetrics = Readonly<{
   cssWidth: number
@@ -150,42 +152,19 @@ export const renderGame = (
     const x = toX(zombie.x)
     const progress = 1 - zombie.x / WORLD_MAX_X
     const y = height * (0.14 + progress * 0.56)
-    const radius = zombie.kind === "boss" ? 21 : zombie.kind === "elite" ? 13 : 9
-    context.fillStyle = "rgba(0,0,0,.4)"
-    context.beginPath()
-    context.ellipse(x, y + radius, radius * 1.3, radius * 0.45, 0, 0, Math.PI * 2)
-    context.fill()
-    context.fillStyle =
-      zombie.kind === "boss" ? "#d14a43" : zombie.kind === "elite" ? "#b665df" : "#7fb646"
-    circle(context, x, y, radius)
-    if (zombie.kind !== "basic") {
-      context.strokeStyle = zombie.kind === "boss" ? "#ff776f" : "#dc92ff"
-      context.lineWidth = 2
-      context.beginPath()
-      context.arc(
-        x,
-        y,
-        radius + 6 + motionPulse(Number(state.elapsedMs), reducedMotion),
-        0,
-        Math.PI * 2,
-      )
-      context.stroke()
-    }
-    context.fillStyle = "#fff"
-    context.font = "800 10px sans-serif"
-    context.fillText(
-      zombie.kind === "boss" ? "BOSS" : zombie.kind === "elite" ? "ELITE" : "Z",
-      x,
-      y + 3,
-    )
+    renderZombie(context, zombie, x, y, Number(state.elapsedMs), reducedMotion)
   }
   const playerX = toX(state.playerX)
-  context.fillStyle = "rgba(0,0,0,.45)"
-  context.beginPath()
-  context.ellipse(playerX, height * 0.84, 27, 9, 0, 0, Math.PI * 2)
-  context.fill()
-  context.fillStyle = "#65f5e9"
-  circle(context, playerX, height * 0.82, 16)
+  renderSquad(
+    context,
+    playerX,
+    height * 0.82,
+    state.squad,
+    width,
+    Number(state.elapsedMs),
+    reducedMotion,
+    shotFeedback,
+  )
   if (effects.length > 0) {
     context.fillStyle = "rgba(255,85,70,.7)"
     for (const effect of effects) {
@@ -198,9 +177,6 @@ export const renderGame = (
       )
     }
   }
-  context.fillStyle = "#071216"
-  context.font = "900 12px sans-serif"
-  context.fillText(String(state.squad), playerX, height * 0.82 + 4)
   const tier = difficultyAt(Number(state.elapsedMs)).tier + 1
   context.fillStyle = "rgba(0,0,0,.5)"
   context.fillRect(width - 62, height - 34, 54, 24)
