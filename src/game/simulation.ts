@@ -1,17 +1,10 @@
-import {
-  difficultyAt,
-  MAX_ENTITIES,
-  RUN_DURATION_MS,
-  STEP_MS,
-  WORLD_MAX_X,
-  WORLD_MIN_X,
-} from "./config"
+import { difficultyAt, MAX_ENTITIES, STEP_MS, WORLD_MAX_X, WORLD_MIN_X } from "./config"
 import { collectGates } from "./gates"
 import { nextRandom } from "./rng"
+import { resolveRunStatus } from "./run-status"
 import { validateSimulationState } from "./state-validation"
 import type {
   Projectile,
-  RunStatus,
   SimulationEvent,
   SimulationInput,
   SimulationOverrides,
@@ -219,14 +212,8 @@ export const stepSimulation = (
     nextId += 1
     spawnCooldownMs = difficulty.spawnIntervalMs
   }
-  let status: RunStatus = state.status
-  if (squad === 0) {
-    status = "game-over"
-    events.push({ kind: "game-over" })
-  } else if (elapsedMs >= RUN_DURATION_MS) {
-    status = "complete"
-    events.push({ kind: "run-completed" })
-  }
+  const runStatus = resolveRunStatus(state.status, squad, elapsedMs)
+  if (runStatus.event !== undefined) events.push(runStatus.event)
   return {
     ...state,
     seed: nextRandom(state.seed).seed,
@@ -250,6 +237,6 @@ export const stepSimulation = (
     projectiles: collisions.projectiles,
     gates: gates.gates,
     events: [...events, ...collisions.events],
-    status,
+    status: runStatus.status,
   }
 }
