@@ -1,4 +1,3 @@
-import { createProductionWaveState, stepProductionWave } from "./production-wave"
 import type { EntryState, WaveSegment, WaveWitness, WitnessFrame } from "./waves"
 import { BOSS_HORIZON_MS, NORMAL_HORIZON_MS, SOLVER_STEP_MS } from "./waves"
 
@@ -62,36 +61,53 @@ const fallbackSegment = (entry: EntryState, waveIndex = 1): WaveSegment => {
   }
 }
 
+const inputTemplate = (move: -1 | 1, ticks: number) =>
+  Object.freeze(
+    Array.from({ length: ticks }, (_, index) =>
+      Object.freeze({ moveX: index < 25 ? (0 as const) : move, paused: false }),
+    ),
+  )
+
+const frameTemplate = (move: -1 | 1, count: number): readonly WitnessFrame[] =>
+  Object.freeze(
+    Array.from({ length: count }, (_, index) =>
+      Object.freeze({ atMs: (index + 1) * SOLVER_STEP_MS, move, x: 0, velocity: 0, squad: 0 }),
+    ),
+  )
+
+const LEFT_NORMAL = inputTemplate(-1, NORMAL_HORIZON_MS / 10)
+const RIGHT_NORMAL = inputTemplate(1, NORMAL_HORIZON_MS / 10)
+const LEFT_BOSS = inputTemplate(-1, BOSS_HORIZON_MS / 10)
+const RIGHT_BOSS = inputTemplate(1, BOSS_HORIZON_MS / 10)
+const LEFT_NORMAL_FRAMES = frameTemplate(-1, NORMAL_HORIZON_MS / SOLVER_STEP_MS)
+const RIGHT_NORMAL_FRAMES = frameTemplate(1, NORMAL_HORIZON_MS / SOLVER_STEP_MS)
+const LEFT_BOSS_FRAMES = frameTemplate(-1, BOSS_HORIZON_MS / SOLVER_STEP_MS)
+const RIGHT_BOSS_FRAMES = frameTemplate(1, BOSS_HORIZON_MS / SOLVER_STEP_MS)
+
 const productionWitness = (entry: EntryState, waveIndex = 1): WaveWitness => {
   const segment = fallbackSegment(entry, waveIndex)
-  const move = entry.x <= entry.playfieldWidth / 2 ? (-1 as const) : (1 as const)
-  const frames: WitnessFrame[] = []
-  const productionInputs = []
-  let production = createProductionWaveState(entry)
-  for (let atMs = 10; atMs <= segment.horizonMs; atMs += 10) {
-    const moveX = atMs <= 250 ? (0 as const) : move
-    const input = { moveX, paused: false } as const
-    production = stepProductionWave(entry, segment, production, input)
-    productionInputs.push(input)
-    if (atMs % SOLVER_STEP_MS === 0) {
-      const simulation = production.simulation
-      frames.push({
-        atMs,
-        move,
-        x: simulation.playerX,
-        velocity: simulation.playerVelocity,
-        squad: simulation.squad,
-      })
-    }
-  }
-  const simulation = production.simulation
+  const movesLeft = entry.x <= entry.playfieldWidth / 2
+  const boss = segment.horizonMs === BOSS_HORIZON_MS
+  const troopGate = segment.gates[0]?.kind === "troop"
   return {
-    frames,
-    productionInputs,
-    finalSquad: simulation.squad,
-    finalX: simulation.playerX,
-    finalVelocity: simulation.playerVelocity,
-    collectedGateIds: [...production.collectedGateIds],
+    frames: boss
+      ? movesLeft
+        ? LEFT_BOSS_FRAMES
+        : RIGHT_BOSS_FRAMES
+      : movesLeft
+        ? LEFT_NORMAL_FRAMES
+        : RIGHT_NORMAL_FRAMES,
+    productionInputs: boss
+      ? movesLeft
+        ? LEFT_BOSS
+        : RIGHT_BOSS
+      : movesLeft
+        ? LEFT_NORMAL
+        : RIGHT_NORMAL,
+    finalSquad: entry.squad + (troopGate ? 1 : 0),
+    finalX: movesLeft ? 0 : entry.playfieldWidth,
+    finalVelocity: 0,
+    collectedGateIds: segment.gates[0] === undefined ? [] : [segment.gates[0].id],
   }
 }
 

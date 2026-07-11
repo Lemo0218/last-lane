@@ -13,6 +13,7 @@ export const PauseMenu = ({ onResume }: Readonly<{ onResume: () => void }>) => {
       aria-label="일시정지"
       onKeyDown={(event) => {
         if (event.key === "Escape") onResume()
+        if (event.key === "Tab") event.preventDefault()
       }}
     >
       <p>작전 일시정지</p>

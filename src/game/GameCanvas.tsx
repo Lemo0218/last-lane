@@ -61,6 +61,7 @@ export const GameCanvas = ({
   const joystickRef = useRef<HTMLDivElement>(null)
   const audioRef = useRef<ReturnType<typeof createGameAudio> | null>(null)
   const pausedRef = useRef(false)
+  const focusBeforePauseRef = useRef<HTMLElement | null>(null)
   const [paused, setPaused] = useState(false)
   const [muted, setMuted] = useState(false)
   const [stats, setStats] = useState(INITIAL_STATS)
@@ -127,12 +128,25 @@ export const GameCanvas = ({
       visible = !document.hidden
       clock = { previous: performance.now(), accumulator: 0 }
     }
+    let audioUnlocked = false
+    let audioUnlocking = false
     const unlock = (): void => {
-      void audio.unlock().catch(reportAudioFailure)
+      if (audioUnlocked || audioUnlocking) return
+      audioUnlocking = true
+      void audio
+        .unlock()
+        .then(() => {
+          audioUnlocked = true
+          joystick.removeEventListener("pointerdown", unlock)
+        })
+        .catch(reportAudioFailure)
+        .finally(() => {
+          audioUnlocking = false
+        })
     }
     document.addEventListener("visibilitychange", visibility)
     window.addEventListener("resize", resize)
-    joystick.addEventListener("pointerdown", unlock, { once: true })
+    joystick.addEventListener("pointerdown", unlock)
     frame = requestAnimationFrame(draw)
     return () => {
       cancelAnimationFrame(frame)
@@ -146,8 +160,14 @@ export const GameCanvas = ({
   }, [audioFactory])
 
   const togglePause = (): void => {
+    if (!pausedRef.current && document.activeElement instanceof HTMLElement)
+      focusBeforePauseRef.current = document.activeElement
     pausedRef.current = !pausedRef.current
     setPaused(pausedRef.current)
+    if (!pausedRef.current)
+      queueMicrotask(() => {
+        focusBeforePauseRef.current?.focus()
+      })
   }
 
   return (
@@ -171,7 +191,8 @@ export const GameCanvas = ({
         ref={canvasRef}
         className="game-canvas"
         aria-label="라스트 레인 게임 화면"
-        tabIndex={0}
+        tabIndex={paused ? -1 : 0}
+        inert={paused}
       />
       <div className="game-controls" inert={paused}>
         <button
@@ -206,7 +227,8 @@ export const GameCanvas = ({
         aria-valuenow={0}
         aria-valuetext="중립"
         aria-describedby="joystick-help"
-        tabIndex={0}
+        tabIndex={paused ? -1 : 0}
+        inert={paused}
       >
         <span className="joystick-knob" />
       </div>

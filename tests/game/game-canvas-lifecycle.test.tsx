@@ -30,9 +30,13 @@ describe("GameCanvas lifecycle", () => {
     let hidden = false
     vi.spyOn(document, "hidden", "get").mockImplementation(() => hidden)
     const calls: string[] = []
+    let unlockAttempts = 0
+    vi.spyOn(console, "warn").mockImplementation(() => undefined)
     const audio: GameAudio = {
       unlock: async () => {
         calls.push("unlock")
+        unlockAttempts += 1
+        if (unlockAttempts === 1) throw new Error("gesture rejected")
       },
       setMuted: (muted) => {
         calls.push(`mute:${muted}`)
@@ -60,13 +64,20 @@ describe("GameCanvas lifecycle", () => {
       pointerId: 1,
       clientX: 100,
     })
+    await Promise.resolve()
+    await Promise.resolve()
+    await Promise.resolve()
+    fireEvent.pointerDown(screen.getByRole("slider", { name: "이동 조이스틱" }), {
+      pointerId: 2,
+      clientX: 100,
+    })
     fireEvent.click(screen.getByRole("button", { name: "소리 끄기" }))
     mounted.unmount()
     await Promise.resolve()
 
     // Then: hidden time does not jump and all gesture/audio/frame resources are cleaned
     expect(screen.queryByText("200초")).not.toBeInTheDocument()
-    expect(calls).toEqual(["unlock", "mute:true", "close"])
+    expect(calls).toEqual(["unlock", "unlock", "mute:true", "close"])
     expect(canvas).toHaveAttribute("width", "400")
     expect(canvas).toHaveAttribute("height", "600")
     expect(request).toHaveBeenCalled()
