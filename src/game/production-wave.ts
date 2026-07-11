@@ -56,7 +56,7 @@ export const stepProductionWave = (
     id: state.simulation.nextEntityId + index,
     kind,
     x: position(Math.round((blocker.minX + blocker.maxX) / 2)),
-    hp: kind === "boss" ? 240 : kind === "elite" ? 80 : 40,
+    hp: kind === "boss" ? 30 : kind === "elite" ? 20 : 10,
     damage: kind === "boss" ? 2 : 1,
   }))
   const stepped = stepSimulation(

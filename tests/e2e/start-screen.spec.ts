@@ -63,3 +63,18 @@ test("materializes boss combat and moves through touch pointer input", async ({ 
     .toBe("1:1:true")
   await joystick.dispatchEvent("pointerup", { pointerId: 9, pointerType: "touch", clientX: 110 })
 })
+
+test("auto-fire kills a basic zombie and increases the browser score", async ({ page }) => {
+  // Given: a normal first wave using production combat rules
+  await page.goto("/")
+  await page.getByRole("button", { name: "게임 시작" }).click()
+  const game = page.locator(".game-shell")
+
+  // When: the first blocker materializes as a basic zombie
+  await expect
+    .poll(async () => Number(await game.getAttribute("data-kills")), { timeout: 5_000 })
+    .toBeGreaterThan(0)
+
+  // Then: the real kill is reflected in observable score telemetry
+  await expect.poll(async () => Number(await game.getAttribute("data-score"))).toBeGreaterThan(100)
+})

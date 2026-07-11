@@ -25,9 +25,11 @@ describe("game audio", () => {
     audio.play([{ kind: "shot-fired", projectileId: 2 }])
     audio.setMuted(true)
     audio.play([{ kind: "squad-damaged", amount: 1 }])
+    audio.setMuted(false)
+    audio.play([{ kind: "zombie-killed", zombieKind: "boss" }])
     await audio.close()
 
     // Then: only the unlocked unmuted effect reaches the context and cleanup closes it
-    expect(calls).toEqual(["resume", "tone:180", "close"])
+    expect(calls).toEqual(["resume", "tone:180", "tone:80", "close"])
   })
 })

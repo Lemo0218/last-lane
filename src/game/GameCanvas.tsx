@@ -22,6 +22,7 @@ type Telemetry = Readonly<{
   zombies: number
   projectiles: number
   boss: boolean
+  kills: number
 }>
 const INITIAL_TELEMETRY: Telemetry = {
   playerX: 500,
@@ -29,9 +30,13 @@ const INITIAL_TELEMETRY: Telemetry = {
   zombies: 0,
   projectiles: 0,
   boss: false,
+  kills: 0,
 }
+export const scoreForCombat = (state: SimulationState, kills: number): number =>
+  Math.floor(Number(state.distance) / 8) + kills * 100 + state.combo * 25
+
 const statsOf = (state: SimulationState, kills: number, active: ActiveWave): HudStats => ({
-  score: Math.floor(Number(state.distance) / 8) + kills * 100 + state.combo * 25,
+  score: scoreForCombat(state, kills),
   elapsedMs: active.elapsedBeforeMs + active.production.atMs,
   squad: state.squad,
   maximumSquad: state.maximumSquad,
@@ -86,6 +91,7 @@ export const GameCanvas = ({
           zombies: state.zombies.length,
           projectiles: state.projectiles.length,
           boss: state.zombies.some((zombie) => zombie.kind === "boss"),
+          kills,
         })
       }
       frame = requestAnimationFrame(draw)
@@ -123,6 +129,8 @@ export const GameCanvas = ({
       data-zombies={telemetry.zombies}
       data-projectiles={telemetry.projectiles}
       data-boss={telemetry.boss}
+      data-kills={telemetry.kills}
+      data-score={stats.score}
     >
       <output className="sr-only" aria-live="polite">
         웨이브 {telemetry.wave}, 좀비 {telemetry.zombies}, 탄환 {telemetry.projectiles}

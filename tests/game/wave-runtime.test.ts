@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest"
+import { scoreForCombat } from "../../src/game/GameCanvas"
 import { createProductionWaveState, stepProductionWave } from "../../src/game/production-wave"
 import type { SolverResult } from "../../src/game/solver"
 import { createWaveRuntime, type WaveRuntimeDependencies } from "../../src/game/wave-runtime"
@@ -15,6 +16,74 @@ const witness: WaveWitness = {
 }
 
 describe("wave runtime", () => {
+  it("kills a materialized basic zombie through real projectile collisions", () => {
+    // Given: a basic wave with a reachable blocker enemy
+    const entry: EntryState = {
+      squad: 3,
+      upgrades: { troop: 0, damage: 0, fireRate: 0, recovery: 0 },
+      x: 500,
+      velocity: 0,
+      playfieldWidth: 1000,
+      playerRadius: 12,
+      blockerRadius: 12,
+      precedingSegments: [],
+    }
+    const combat: WaveSegment = {
+      id: "wave-1",
+      horizonMs: 6_000,
+      blockers: [{ fromMs: 10, toMs: 10, minX: 680, maxX: 720, damage: 1 }],
+      gates: [],
+    }
+
+    // When: production advances through auto-fire collision
+    let production = createProductionWaveState(entry)
+    let killed = false
+    for (let step = 0; step < 100; step += 1) {
+      production = stepProductionWave(entry, combat, production, { moveX: 0, paused: false })
+      killed ||= production.simulation.events.some((event) => event.kind === "zombie-killed")
+    }
+
+    // Then: the real zombie is removed and a kill event was emitted
+    expect(killed).toBe(true)
+    expect(production.simulation.zombies).toHaveLength(0)
+    expect(scoreForCombat(production.simulation, 1)).toBeGreaterThan(
+      scoreForCombat(production.simulation, 0),
+    )
+  })
+
+  it("allows a moving squad to kill a deterministic boss with the same combat rules", () => {
+    // Given: a fifth-wave boss at production combat distance
+    const entry: EntryState = {
+      squad: 3,
+      upgrades: { troop: 0, damage: 0, fireRate: 0, recovery: 0 },
+      x: 500,
+      velocity: 0,
+      playfieldWidth: 1000,
+      playerRadius: 12,
+      blockerRadius: 12,
+      precedingSegments: [],
+    }
+    const boss: WaveSegment = {
+      id: "boss-5",
+      horizonMs: 12_000,
+      blockers: [{ fromMs: 10, toMs: 10, minX: 880, maxX: 920, damage: 2 }],
+      gates: [],
+    }
+
+    // When: the squad retreats while auto-fire resolves the boss
+    let production = createProductionWaveState(entry)
+    let bossKilled = false
+    for (let step = 0; step < 500; step += 1) {
+      production = stepProductionWave(entry, boss, production, { moveX: -1, paused: false })
+      bossKilled ||= production.simulation.events.some(
+        (event) => event.kind === "zombie-killed" && event.zombieKind === "boss",
+      )
+    }
+
+    // Then: boss death is reached without injecting a fake event
+    expect(bossKilled).toBe(true)
+    expect(production.simulation.squad).toBeGreaterThan(0)
+  })
   it("materializes blockers as deterministic zombies that trigger auto-fire", () => {
     // Given: a production segment whose blocker activates on the first tick
     const entry: EntryState = {
