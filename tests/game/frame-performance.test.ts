@@ -10,6 +10,6 @@ describe("frame performance telemetry", () => {
     for (let index = 1; index <= 100; index += 1) metrics.record(index / 10, 100 + index, index)
 
     // Then: p95 uses the nearest-rank sample and caps retain their high-water marks
-    expect(metrics.snapshot()).toEqual({ p95WorkMs: 9.5, maxEntities: 128, maxEffects: 32 })
+    expect(metrics.snapshot()).toEqual({ p95WorkMs: 9.5, maxEntities: 200, maxEffects: 100 })
   })
 })

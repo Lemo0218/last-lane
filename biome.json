@@ -12,6 +12,7 @@
       "**",
       "!!node_modules",
       "!!dist",
+      "!!dev-dist",
       "!!coverage",
       "!!playwright-report",
       "!!test-results"
@@ -50,7 +51,13 @@
   },
   "overrides": [
     {
-      "includes": ["vite.config.ts", "vitest.config.ts", "playwright.config.ts", "api/**/*.ts"],
+      "includes": [
+        "vite.config.ts",
+        "vitest.config.ts",
+        "playwright.config.ts",
+        "playwright.stress.config.ts",
+        "api/**/*.ts"
+      ],
       "linter": {
         "rules": {
           "style": {

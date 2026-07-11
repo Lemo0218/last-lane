@@ -1,5 +1,3 @@
-import { MAX_ENTITIES, MAX_VISIBLE_EFFECTS } from "./config"
-
 export type FramePerformanceSnapshot = Readonly<{
   p95WorkMs: number
   maxEntities: number
@@ -14,8 +12,8 @@ export const createFramePerformance = () => {
     record: (workMs: number, entities: number, effects: number): void => {
       samples.push(workMs)
       if (samples.length > 240) samples.shift()
-      maxEntities = Math.max(maxEntities, Math.min(MAX_ENTITIES, entities))
-      maxEffects = Math.max(maxEffects, Math.min(MAX_VISIBLE_EFFECTS, effects))
+      maxEntities = Math.max(maxEntities, entities)
+      maxEffects = Math.max(maxEffects, effects)
     },
     snapshot: (): FramePerformanceSnapshot => {
       const ordered = [...samples].sort((left, right) => left - right)

@@ -3,6 +3,7 @@ import { Hud } from "../ui/Hud"
 import { PauseMenu } from "../ui/PauseMenu"
 import { createGameAudio } from "./audio"
 import { captureE2EGolden } from "./e2e-golden"
+import { createEffectPool } from "./effect-pool"
 import { advanceFrame, type FrameClock } from "./frame-clock"
 import { createFramePerformance } from "./frame-performance"
 import { GAME_E2E_ENABLED, INITIAL_GAME_TELEMETRY, reportAudioFailure } from "./game-canvas-support"
@@ -13,6 +14,7 @@ import { INITIAL_STATS, statsOf } from "./run-summary"
 import type { ScoreBreakdown } from "./scoring"
 import { generateWaveCandidate } from "./segment-generator"
 import { solveWave } from "./solver"
+import { createStressFrame } from "./stress-harness"
 import { createTranscriptRecorder, type Transcript } from "./transcript"
 import { createWaveRuntime, type WaveRuntimeDependencies } from "./wave-runtime"
 
@@ -50,6 +52,7 @@ export const GameCanvas = ({
       ? new URLSearchParams(window.location.search).get("testMode")
       : null
     const deterministicBoss = testMode === "boss" || testMode === "timeout-boss"
+    const stressEnabled = import.meta.env.DEV && testMode === "stress"
     const forcedTimeout: WaveRuntimeDependencies | undefined = testMode?.startsWith("timeout")
       ? {
           candidate: generateWaveCandidate,
@@ -63,6 +66,8 @@ export const GameCanvas = ({
     let scoreCounters = INITIAL_RUN_SCORE
     let tick = 0
     let finished = false
+    let effects = createEffectPool()
+    let stress = stressEnabled ? createStressFrame(runtime.active.production.simulation) : undefined
     let frameSamples = 0
     const performanceMetrics = createFramePerformance()
     const transcript = createTranscriptRecorder()
@@ -89,6 +94,7 @@ export const GameCanvas = ({
         if (state.status !== "running") break
       }
       const state = runtime.active.production.simulation
+      effects = effects.step(state.events, advanced.steps * 10)
       if (!finished && state.status !== "running") {
         finished = true
         const elapsedMs = runtime.active.elapsedBeforeMs + runtime.active.production.atMs
@@ -107,16 +113,17 @@ export const GameCanvas = ({
           transcript: completedTranscript,
         })
       }
-      if (context !== null) renderGame(context, state, metrics, reducedMotion, runtime.active)
-      const visibleEffects = state.events.some((event) => event.kind === "squad-damaged")
-        ? reducedMotion
-          ? 2
-          : 6
-        : 0
+      if (stress !== undefined) stress = stress.step()
+      const renderedState = stress?.state ?? state
+      const renderedEffects = stress?.effects ?? effects.effects
+      if (context !== null)
+        renderGame(context, renderedState, metrics, reducedMotion, runtime.active, renderedEffects)
       performanceMetrics.record(
         performance.now() - workStarted,
-        state.zombies.length + state.projectiles.length + state.gates.length,
-        visibleEffects,
+        renderedState.zombies.length +
+          renderedState.projectiles.length +
+          renderedState.gates.length,
+        renderedEffects.length,
       )
       frameSamples += 1
       const shell = shellRef.current
@@ -126,6 +133,7 @@ export const GameCanvas = ({
         shell.setAttribute("data-frame-p95-ms", snapshot.p95WorkMs.toFixed(3))
         shell.setAttribute("data-max-entities", String(snapshot.maxEntities))
         shell.setAttribute("data-max-effects", String(snapshot.maxEffects))
+        shell.setAttribute("data-functional-status", state.status)
       }
       if (advanced.steps > 0) {
         const elapsedMs = runtime.active.elapsedBeforeMs + runtime.active.production.atMs

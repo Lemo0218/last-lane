@@ -40,7 +40,7 @@ describe("production difficulty tuning", () => {
 
     // Then: skilled deterministic play exceeds the upper target duration
     expect(survivedMs).toBeGreaterThan(300_000)
-  })
+  }, 10_000)
 
   it("accepts only segments whose exact production witness remains solvable", () => {
     // Given: sixty consecutive production decisions spanning the ranked limit

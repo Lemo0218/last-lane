@@ -1,4 +1,5 @@
 import { difficultyAt, WORLD_MAX_X } from "./config"
+import type { VisibleEffect } from "./effect-pool"
 import type { SimulationState } from "./types"
 import type { ActiveWave } from "./wave-runtime"
 
@@ -48,6 +49,7 @@ export const renderGame = (
   metrics: CanvasMetrics,
   reducedMotion: boolean,
   active?: ActiveWave,
+  effects: readonly VisibleEffect[] = [],
 ): void => {
   const { cssWidth: width, cssHeight: height, dpr } = metrics
   context.setTransform(dpr, 0, 0, dpr, 0, 0)
@@ -184,14 +186,15 @@ export const renderGame = (
   context.fill()
   context.fillStyle = "#65f5e9"
   circle(context, playerX, height * 0.82, 16)
-  const hit = state.events.some((event) => event.kind === "squad-damaged")
-  if (hit) {
+  if (effects.length > 0) {
     context.fillStyle = "rgba(255,85,70,.7)"
-    const particles = reducedMotion ? 2 : 6
-    for (let index = 0; index < particles; index += 1) {
-      const angle = (Math.PI * 2 * index) / particles
-      circle(context, playerX + Math.cos(angle) * 24, height * 0.82 + Math.sin(angle) * 24, 3)
-    }
+    for (const effect of effects)
+      circle(
+        context,
+        playerX + Math.cos(effect.angle) * 24,
+        height * 0.82 + Math.sin(effect.angle) * 24,
+        3,
+      )
   }
   context.fillStyle = "#071216"
   context.font = "900 12px sans-serif"
