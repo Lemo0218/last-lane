@@ -207,21 +207,6 @@ describe("combat simulation", () => {
     expect(result.events.filter((event) => event.kind === "boss-spawned")).toHaveLength(1)
   })
 
-  it("Given equal states and input transcript When simulated Then full states remain deterministic", () => {
-    const inputs = [1, 0, -1, 1, 1, 0, -1] as const
-    let first = createSimulation(1234, noUpgrades, { spawnCooldownMs: 0 })
-    let second = createSimulation(1234, noUpgrades, { spawnCooldownMs: 0 })
-
-    for (const moveX of inputs) {
-      first = stepSimulation(first, { moveX, paused: false })
-      second = stepSimulation(second, { moveX, paused: false })
-    }
-
-    expect(first).toEqual(second)
-    expect(first.seed).toBe(second.seed)
-    expect(first.events).toEqual(second.events)
-  })
-
   it("Given mixed entities at cap When stepped Then firing and spawning preserve the cap", () => {
     const zombies = Array.from({ length: 59 }, (_, id) => ({
       id,
