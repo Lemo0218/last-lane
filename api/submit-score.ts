@@ -1,10 +1,12 @@
 import { createHash } from "node:crypto"
+import { ZodError } from "zod"
 import { type RankedRun, scoreSubmissionSchema } from "../src/api/contracts"
 import { RankingConflictError, RankingStore, VercelBlobAdapter } from "../src/server/blob-store"
-import { normalizeNickname } from "../src/server/nicknames"
+import { DistributedRateLimiter } from "../src/server/distributed-rate-limit"
+import { NicknameError, normalizeNickname } from "../src/server/nicknames"
 import { LayeredRateLimiter } from "../src/server/rate-limit"
 import { TicketError, verifyTicket } from "../src/server/ticket"
-import { verifyReplay } from "../src/server/verifier"
+import { VerificationError, verifyReplay } from "../src/server/verifier"
 
 const limiter = new LayeredRateLimiter("score-submission", { burst: 3, sustained: 12 })
 const json = (body: unknown, status = 200): Response => Response.json(body, { status })
@@ -13,6 +15,7 @@ type SubmitDependencies = Readonly<{
   store: RankingStore
   now: () => number
   limiter: LayeredRateLimiter
+  distributedLimiter?: DistributedRateLimiter
 }>
 
 export const submitScore = async (
@@ -20,6 +23,16 @@ export const submitScore = async (
   dependencies: SubmitDependencies,
 ): Promise<Response> => {
   if (request.method !== "POST") return json({ error: "method not allowed" }, 405)
+  try {
+    if (
+      dependencies.distributedLimiter !== undefined &&
+      !(await dependencies.distributedLimiter.allow(request.headers))
+    )
+      return json({ error: "rate limited" }, 429)
+  } catch (error) {
+    if (error instanceof Error) return json({ error: "ranking unavailable" }, 503)
+    throw error
+  }
   const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown"
   if (!dependencies.limiter.allow(ip)) return json({ error: "rate limited" }, 429)
   const declared = Number(request.headers.get("content-length") ?? "0")
@@ -57,8 +70,15 @@ export const submitScore = async (
       })(),
     })
   } catch (error) {
-    if (error instanceof RankingConflictError) return json({ error: error.message }, 409)
-    if (error instanceof Error) return json({ error: error.message }, 400)
+    if (error instanceof RankingConflictError) return json({ error: "submission conflict" }, 409)
+    if (error instanceof TicketError) return json({ error: "invalid ticket" }, 401)
+    if (error instanceof ZodError || error instanceof NicknameError)
+      return json({ error: "invalid submission" }, 400)
+    if (error instanceof VerificationError) {
+      if (error.code === "verification-timeout") return json({ error: "ranking unavailable" }, 503)
+      return json({ error: "invalid submission" }, 400)
+    }
+    if (error instanceof Error) return json({ error: "ranking unavailable" }, 503)
     throw error
   }
 }
@@ -66,11 +86,16 @@ export const submitScore = async (
 export default async function handler(request: Request): Promise<Response> {
   const secret = process.env["TICKET_HMAC_SECRET"]
   if (secret === undefined || process.env["BLOB_READ_WRITE_TOKEN"] === undefined)
-    return json({ error: "ranked service unavailable" }, 503)
+    return json({ error: "ranking unavailable" }, 503)
   return submitScore(request, {
     secret,
     store: new RankingStore(new VercelBlobAdapter()),
     now: Date.now,
     limiter,
+    distributedLimiter: new DistributedRateLimiter(new VercelBlobAdapter(), secret, {
+      kind: "submit",
+      windowMs: 60_000,
+      slots: 12,
+    }),
   })
 }

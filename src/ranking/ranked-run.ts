@@ -12,6 +12,13 @@ type Dependencies = Readonly<{
   now?: () => number
 }>
 
+const retryable = (error: unknown): boolean => {
+  if (error instanceof TypeError) return true
+  if (typeof error !== "object" || error === null || !("response" in error)) return false
+  const response = error.response
+  return response instanceof Response && response.status >= 500
+}
+
 export const createRankedRun = ({
   requestTicket,
   submit,
@@ -46,7 +53,7 @@ export const createRankedRun = ({
         const result = await submit(payload)
         return { kind: "ranked", rank: result.rank }
       } catch (error) {
-        if (!(error instanceof TypeError)) {
+        if (!retryable(error)) {
           ticket = consumedTicket
           throw error
         }

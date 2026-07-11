@@ -83,3 +83,39 @@ it("repairs a post-pending failure without scanning 101 published scores", async
   expect(await store.reconcile()).toEqual({ repaired: 1, failed: 0 })
   expect(await adapter.get("runs/recover.json")).toBeDefined()
 })
+
+it("serializes quarantine against repair so a nonce is never failed and ranked", async () => {
+  const adapter = new InMemoryBlobAdapter(() => 0)
+  const run = {
+    nonce: "lease-race",
+    ticketDigest: "f".repeat(64),
+    nickname: "Runner",
+    score: 3,
+    survivalTicks: 4,
+    submittedAt: "2026-01-01T00:00:00.000Z",
+  }
+  await adapter.put("pending/lease-race.json", JSON.stringify(run), { allowOverwrite: false })
+  const store = new RankingStore(adapter, () => 100_000_000)
+  await Promise.allSettled([store.reconcile(100_000_000), store.repairExisting(run)])
+  const failed = await adapter.get("failed/lease-race.json")
+  const ranked = await adapter.get("runs/lease-race.json")
+  expect(Number(failed !== undefined) + Number(ranked !== undefined)).toBe(1)
+})
+
+it("recovers a conservatively expired publication lease", async () => {
+  const adapter = new InMemoryBlobAdapter()
+  await adapter.put(
+    "locks/stale",
+    JSON.stringify({ owner: "00000000-0000-4000-8000-000000000000", expiresAt: 1 }),
+    { allowOverwrite: false },
+  )
+  const run = {
+    nonce: "stale",
+    ticketDigest: "a".repeat(64),
+    nickname: "Runner",
+    score: 3,
+    survivalTicks: 4,
+    submittedAt: "2026-01-01T00:00:00.000Z",
+  }
+  await expect(new RankingStore(adapter, () => 10_000).publish(run)).resolves.toEqual(run)
+})

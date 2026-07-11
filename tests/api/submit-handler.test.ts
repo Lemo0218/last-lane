@@ -140,4 +140,33 @@ describe("submit score handler", () => {
     ])
     expect(responses.map((response) => response.status).sort()).toEqual([200, 409])
   })
+
+  it("sanitizes unknown storage failures as retryable 503 responses", async () => {
+    class BrokenAdapter extends InMemoryBlobAdapter {
+      override async get(): Promise<undefined> {
+        throw new Error("private backend credential leaked")
+      }
+    }
+    const ticket = issueTicket(
+      secret,
+      0,
+      () => "handler-nonce-004",
+      () => 1,
+    )
+    const response = await submitScore(
+      request({
+        ticket,
+        nickname: "Runner",
+        transcript: { entries: [{ tick: 0, move: "N" }], endTick: 844 },
+      }),
+      {
+        secret,
+        store: new RankingStore(new BrokenAdapter()),
+        now: () => 1,
+        limiter: limiter(),
+      },
+    )
+    expect(response.status).toBe(503)
+    expect(await response.json()).toEqual({ error: "ranking unavailable" })
+  })
 })

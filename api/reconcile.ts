@@ -9,6 +9,12 @@ export default async function handler(request: Request): Promise<Response> {
   if (request.headers.get("authorization") !== `Bearer ${secret}`)
     return Response.json({ error: "unauthorized" }, { status: 401 })
   if (process.env["BLOB_READ_WRITE_TOKEN"] === undefined)
-    return Response.json({ error: "ranked service unavailable" }, { status: 503 })
-  return Response.json(await new RankingStore(new VercelBlobAdapter()).reconcile())
+    return Response.json({ error: "ranking unavailable" }, { status: 503 })
+  try {
+    return Response.json(await new RankingStore(new VercelBlobAdapter()).reconcile())
+  } catch (error) {
+    if (error instanceof Error)
+      return Response.json({ error: "ranking unavailable" }, { status: 503 })
+    throw error
+  }
 }

@@ -1,8 +1,10 @@
+import { randomUUID } from "node:crypto"
 import { del, get, list, put } from "@vercel/blob"
+import { z } from "zod"
 import { type RankedRun, rankedRunSchema } from "../api/contracts"
 
-type PutOptions = Readonly<{ allowOverwrite: boolean }>
-type Stored = Readonly<{ pathname: string; uploadedAt: number; body: string }>
+export type PutOptions = Readonly<{ allowOverwrite: boolean }>
+export type Stored = Readonly<{ pathname: string; uploadedAt: number; body: string }>
 export interface BlobAdapter {
   put(path: string, body: string, options: PutOptions): Promise<void>
   get(path: string): Promise<Stored | undefined>
@@ -20,6 +22,12 @@ export class RankingConflictError extends Error {
   constructor() {
     super("nonce conflict")
     this.name = "RankingConflictError"
+  }
+}
+export class RankingLeaseError extends Error {
+  constructor() {
+    super("ranking lease unavailable")
+    this.name = "RankingLeaseError"
   }
 }
 
@@ -100,8 +108,14 @@ export const scorePath = (
 }
 
 export class RankingStore {
-  constructor(readonly adapter: BlobAdapter) {}
+  constructor(
+    readonly adapter: BlobAdapter,
+    readonly now: () => number = Date.now,
+  ) {}
   async repairExisting(run: RankedRun): Promise<RankedRun | undefined> {
+    return this.withLease(run.nonce, () => this.repairExistingLocked(run))
+  }
+  private async repairExistingLocked(run: RankedRun): Promise<RankedRun | undefined> {
     const completed = await this.adapter.get(`runs/${run.nonce}.json`)
     if (completed !== undefined) {
       const storedRun = rankedRunSchema.parse(JSON.parse(completed.body))
@@ -117,6 +131,9 @@ export class RankingStore {
     return storedRun
   }
   async publish(run: RankedRun): Promise<RankedRun> {
+    return this.withLease(run.nonce, () => this.publishLocked(run))
+  }
+  private async publishLocked(run: RankedRun): Promise<RankedRun> {
     const runPath = `runs/${run.nonce}.json`
     const existing = await this.adapter.get(runPath)
     if (existing !== undefined) {
@@ -159,15 +176,21 @@ export class RankingStore {
     let repaired = 0,
       failed = 0
     for (const item of await this.adapter.list("pending/", 100)) {
-      const run = rankedRunSchema.parse(JSON.parse(item.body))
-      if (now - item.uploadedAt > 24 * 60 * 60 * 1_000) {
-        await this.putMatching(`failed/${run.nonce}.json`, run)
-        await this.adapter.delete(item.pathname)
-        failed += 1
-      } else {
+      const candidate = rankedRunSchema.parse(JSON.parse(item.body))
+      const result = await this.withLease(candidate.nonce, async () => {
+        const current = await this.adapter.get(item.pathname)
+        if (current === undefined) return "missing" as const
+        const run = rankedRunSchema.parse(JSON.parse(current.body))
+        if (now - current.uploadedAt > 24 * 60 * 60 * 1_000) {
+          await this.putMatching(`failed/${run.nonce}.json`, run)
+          await this.adapter.delete(item.pathname)
+          return "failed" as const
+        }
         await this.project(run, item.pathname)
-        repaired += 1
-      }
+        return "repaired" as const
+      })
+      if (result === "failed") failed += 1
+      if (result === "repaired") repaired += 1
     }
     return { repaired, failed }
   }
@@ -180,4 +203,35 @@ export class RankingStore {
       if (existing === undefined || !same(existing, run)) throw new RankingConflictError()
     }
   }
+  private async withLease<T>(nonce: string, operation: () => Promise<T>): Promise<T> {
+    const path = `locks/${nonce}`
+    const owner = randomUUID()
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+      const expiresAt = this.now() + 5_000
+      try {
+        await this.adapter.put(path, JSON.stringify({ owner, expiresAt }), {
+          allowOverwrite: false,
+        })
+        try {
+          return await operation()
+        } finally {
+          const held = await this.adapter.get(path)
+          const parsed =
+            held === undefined ? undefined : leaseSchema.safeParse(JSON.parse(held.body))
+          if (parsed?.success === true && parsed.data.owner === owner)
+            await this.adapter.delete(path)
+        }
+      } catch (error) {
+        if (!(error instanceof BlobConflictError)) throw error
+        const held = await this.adapter.get(path)
+        const parsed = held === undefined ? undefined : leaseSchema.safeParse(JSON.parse(held.body))
+        if (parsed?.success === true && parsed.data.expiresAt < this.now())
+          await this.adapter.delete(path)
+        await new Promise<void>((resolve) => setTimeout(resolve, 5))
+      }
+    }
+    throw new RankingLeaseError()
+  }
 }
+
+const leaseSchema = z.object({ owner: z.string().uuid(), expiresAt: z.number().int() })

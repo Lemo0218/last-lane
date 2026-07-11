@@ -135,7 +135,14 @@ describe("ranking store", () => {
       submittedAt: "2026-01-01T00:00:00.000Z",
     }
     await new RankingStore(new RecordingAdapter()).publish(run)
-    expect(operations.map((value) => value.split(":")[0])).toEqual(["put", "put", "put", "delete"])
+    expect(operations.map((value) => value.split(":")[0])).toEqual([
+      "put",
+      "put",
+      "put",
+      "put",
+      "delete",
+      "delete",
+    ])
     expect(operations.every((value) => !value.startsWith("put") || value.endsWith("false"))).toBe(
       true,
     )
