@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import { canvasMetrics } from "../../src/game/renderer"
+import { canvasMetrics, motionPulse } from "../../src/game/renderer"
 
 describe("canvas metrics", () => {
   it("caps device pixel ratio while preserving CSS size", () => {
@@ -14,5 +14,13 @@ describe("canvas metrics", () => {
       height: 1400,
       dpr: 2,
     })
+  })
+
+  it("freezes telegraph animation when reduced motion is requested", () => {
+    // Given: two different animation timestamps
+    // When: pulse values are computed with reduced motion enabled
+    // Then: feedback remains stable instead of oscillating
+    expect(motionPulse(0, true)).toBe(motionPulse(700, true))
+    expect(motionPulse(0, false)).not.toBe(motionPulse(700, false))
   })
 })

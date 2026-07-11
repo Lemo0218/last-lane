@@ -1,5 +1,6 @@
 import { difficultyAt, WORLD_MAX_X } from "./config"
 import type { SimulationState } from "./types"
+import type { ActiveWave } from "./wave-runtime"
 
 export type CanvasMetrics = Readonly<{
   cssWidth: number
@@ -32,6 +33,9 @@ export const resizeCanvas = (canvas: HTMLCanvasElement): CanvasMetrics => {
   return metrics
 }
 
+export const motionPulse = (elapsedMs: number, reducedMotion: boolean): number =>
+  reducedMotion ? 0 : Math.sin(elapsedMs / 90) * 3
+
 const circle = (context: CanvasRenderingContext2D, x: number, y: number, radius: number): void => {
   context.beginPath()
   context.arc(x, y, radius, 0, Math.PI * 2)
@@ -43,6 +47,7 @@ export const renderGame = (
   state: SimulationState,
   metrics: CanvasMetrics,
   reducedMotion: boolean,
+  active?: ActiveWave,
 ): void => {
   const { cssWidth: width, cssHeight: height, dpr } = metrics
   context.setTransform(dpr, 0, 0, dpr, 0, 0)
@@ -63,6 +68,38 @@ export const renderGame = (
     context.stroke()
   }
   context.setLineDash([])
+  if (active !== undefined) {
+    context.fillStyle = active.segment.horizonMs === 12_000 ? "#ff776f" : "#d5ebed"
+    context.font = "900 13px sans-serif"
+    context.textAlign = "left"
+    context.fillText(
+      active.segment.horizonMs === 12_000
+        ? `보스 웨이브 ${active.index + 1}`
+        : `웨이브 ${active.index + 1}`,
+      roadLeft + 8,
+      72,
+    )
+    for (const blocker of active.segment.blockers) {
+      if (blocker.fromMs - active.production.atMs > 900 || blocker.toMs < active.production.atMs)
+        continue
+      const left = toX(blocker.minX)
+      const right = toX(blocker.maxX)
+      const pulse = reducedMotion ? 0.28 : 0.2 + motionPulse(active.production.atMs, false) * 0.025
+      context.fillStyle = `rgba(255,75,65,${pulse})`
+      context.fillRect(left, height * 0.24, right - left, height * 0.48)
+      context.strokeStyle = "#ff766d"
+      context.strokeRect(left, height * 0.24, right - left, height * 0.48)
+      const hordeSize = active.segment.horizonMs === 12_000 ? 5 : 3
+      context.fillStyle = active.segment.horizonMs === 12_000 ? "#d14a43" : "#7fb646"
+      for (let index = 0; index < hordeSize; index += 1)
+        circle(
+          context,
+          left + ((index + 1) * (right - left)) / (hordeSize + 1),
+          height * 0.32,
+          active.segment.horizonMs === 12_000 && index === 2 ? 16 : 8,
+        )
+    }
+  }
   for (let index = 0; index < 16; index += 1) {
     const y = (index * 83 + (reducedMotion ? 0 : Number(state.elapsedMs) / 14)) % height
     context.fillStyle = index % 2 === 0 ? "#152022" : "#303738"
@@ -83,6 +120,11 @@ export const renderGame = (
     context.fillStyle = "#ffe87a"
     context.fillRect(toX(projectile.x) - 2, height * 0.57, 4, 15)
   }
+  const shotFeedback = state.events.some((event) => event.kind === "shot-fired")
+  if (shotFeedback) {
+    context.fillStyle = "#fff3a3"
+    circle(context, toX(state.playerX), height * 0.77, reducedMotion ? 5 : 8)
+  }
   for (const zombie of state.zombies) {
     const x = toX(zombie.x)
     const progress = 1 - zombie.x / WORLD_MAX_X
@@ -95,6 +137,19 @@ export const renderGame = (
     context.fillStyle =
       zombie.kind === "boss" ? "#d14a43" : zombie.kind === "elite" ? "#b665df" : "#7fb646"
     circle(context, x, y, radius)
+    if (zombie.kind !== "basic") {
+      context.strokeStyle = zombie.kind === "boss" ? "#ff776f" : "#dc92ff"
+      context.lineWidth = 2
+      context.beginPath()
+      context.arc(
+        x,
+        y,
+        radius + 6 + motionPulse(Number(state.elapsedMs), reducedMotion),
+        0,
+        Math.PI * 2,
+      )
+      context.stroke()
+    }
     context.fillStyle = "#fff"
     context.font = "800 10px sans-serif"
     context.fillText(
@@ -110,6 +165,15 @@ export const renderGame = (
   context.fill()
   context.fillStyle = "#65f5e9"
   circle(context, playerX, height * 0.82, 16)
+  const hit = state.events.some((event) => event.kind === "squad-damaged")
+  if (hit) {
+    context.fillStyle = "rgba(255,85,70,.7)"
+    const particles = reducedMotion ? 2 : 6
+    for (let index = 0; index < particles; index += 1) {
+      const angle = (Math.PI * 2 * index) / particles
+      circle(context, playerX + Math.cos(angle) * 24, height * 0.82 + Math.sin(angle) * 24, 3)
+    }
+  }
   context.fillStyle = "#071216"
   context.font = "900 12px sans-serif"
   context.fillText(String(state.squad), playerX, height * 0.82 + 4)

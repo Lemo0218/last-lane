@@ -163,6 +163,60 @@ h1 {
   cursor: pointer;
 }
 
+.joystick {
+  --joystick-x: 0px;
+  position: absolute;
+  z-index: 2;
+  bottom: max(22px, env(safe-area-inset-bottom));
+  left: 50%;
+  width: 132px;
+  height: 72px;
+  border: 2px solid rgb(113 255 245 / 70%);
+  border-radius: 40px;
+  background: rgb(2 14 17 / 72%);
+  box-shadow: inset 0 0 24px rgb(101 245 233 / 12%);
+  touch-action: none;
+  transform: translateX(-50%);
+  user-select: none;
+}
+
+.joystick::before,
+.joystick::after {
+  position: absolute;
+  top: 22px;
+  color: #9fbabc;
+  font-size: 18px;
+  content: "‹";
+}
+
+.joystick::before {
+  left: 14px;
+}
+.joystick::after {
+  right: 14px;
+  content: "›";
+}
+
+.joystick-knob {
+  position: absolute;
+  top: 9px;
+  left: calc(50% - 25px);
+  width: 50px;
+  height: 50px;
+  border: 2px solid #c6fffb;
+  border-radius: 50%;
+  background: linear-gradient(145deg, #67f7f0, #168e91);
+  box-shadow: 0 5px 16px #0008;
+  transform: translateX(var(--joystick-x));
+  transition: transform 90ms ease-out;
+}
+
+.joystick[data-active="true"] .joystick-knob {
+  filter: brightness(1.18);
+  transition: none;
+  scale: 0.94;
+}
+
 .pause-menu {
   position: absolute;
   z-index: 3;

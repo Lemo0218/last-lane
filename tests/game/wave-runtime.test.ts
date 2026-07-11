@@ -1,0 +1,58 @@
+import { describe, expect, it } from "vitest"
+
+import type { SolverResult } from "../../src/game/solver"
+import { createWaveRuntime, type WaveRuntimeDependencies } from "../../src/game/wave-runtime"
+import type { EntryState, WaveSegment, WaveWitness } from "../../src/game/waves"
+
+const segment: WaveSegment = { id: "accepted", horizonMs: 6_000, blockers: [], gates: [] }
+const witness: WaveWitness = {
+  frames: [],
+  productionInputs: [],
+  finalSquad: 3,
+  finalX: 500,
+  finalVelocity: 0,
+  collectedGateIds: [],
+}
+
+describe("wave runtime", () => {
+  it("solves candidates with the exact entry state and applies an accepted segment", () => {
+    // Given: an injected candidate generator and accepting solver
+    const entries: EntryState[] = []
+    const dependencies: WaveRuntimeDependencies = {
+      candidate: () => segment,
+      solve: (entry): SolverResult => {
+        entries.push(entry)
+        return { kind: "accepted", segment, witness, elapsedMs: 0 }
+      },
+    }
+
+    // When: the production runtime is created
+    const runtime = createWaveRuntime(dependencies)
+
+    // Then: the solver receives the production entry and its segment becomes active
+    expect(entries[0]).toMatchObject({ x: 500, velocity: 0, squad: 3, precedingSegments: [] })
+    expect(runtime.active.segment.id).toBe("accepted")
+  })
+
+  it("applies the solver fallback instead of the rejected candidate", () => {
+    // Given: a solver that returns a fallback segment
+    const fallback = { ...segment, id: "fallback" }
+    const dependencies: WaveRuntimeDependencies = {
+      candidate: () => ({ ...segment, id: "rejected" }),
+      solve: (_entry, rejected): SolverResult => ({
+        kind: "fallback",
+        rejectedSegment: rejected,
+        segment: fallback,
+        witness,
+        patternId: "safe",
+        elapsedMs: 0,
+      }),
+    }
+
+    // When: the runtime activates its first segment
+    const runtime = createWaveRuntime(dependencies)
+
+    // Then: production drives the fallback returned by the solver
+    expect(runtime.active.segment.id).toBe("fallback")
+  })
+})
