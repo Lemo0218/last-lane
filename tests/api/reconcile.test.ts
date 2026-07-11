@@ -106,7 +106,12 @@ it("recovers a conservatively expired publication lease", async () => {
   const adapter = new InMemoryBlobAdapter()
   await adapter.put(
     "locks/stale",
-    JSON.stringify({ owner: "00000000-0000-4000-8000-000000000000", expiresAt: 1 }),
+    JSON.stringify({
+      status: "held",
+      owner: "00000000-0000-4000-8000-000000000000",
+      acquiredAt: 0,
+      expiresAt: 1,
+    }),
     { allowOverwrite: false },
   )
   const run = {
@@ -118,4 +123,59 @@ it("recovers a conservatively expired publication lease", async () => {
     submittedAt: "2026-01-01T00:00:00.000Z",
   }
   await expect(new RankingStore(adapter, () => 10_000).publish(run)).resolves.toEqual(run)
+})
+
+it("allows only one stale contender to win an ETag takeover", async () => {
+  const adapter = new InMemoryBlobAdapter()
+  const path = "locks/etag-race"
+  await adapter.put(
+    path,
+    JSON.stringify({
+      status: "held",
+      owner: "00000000-0000-4000-8000-000000000000",
+      acquiredAt: 0,
+      expiresAt: 1,
+    }),
+    { allowOverwrite: false },
+  )
+  const stale = await adapter.get(path)
+  expect(stale).toBeDefined()
+  if (stale === undefined) return
+  const contenders = await Promise.allSettled([
+    adapter.put(path, "first", { allowOverwrite: true, ifMatch: stale.etag }),
+    adapter.put(path, "second", { allowOverwrite: true, ifMatch: stale.etag }),
+  ])
+  expect(contenders.filter((result) => result.status === "fulfilled")).toHaveLength(1)
+  expect(contenders.filter((result) => result.status === "rejected")).toHaveLength(1)
+})
+
+it("does not allow takeover while an operation is near the function deadline", async () => {
+  let release: (() => void) | undefined
+  const gate = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  class SlowAdapter extends InMemoryBlobAdapter {
+    override async put(
+      path: string,
+      body: string,
+      options: Readonly<{ allowOverwrite: boolean; ifMatch?: string }>,
+    ): Promise<void> {
+      if (path === "pending/long.json") await gate
+      await super.put(path, body, options)
+    }
+  }
+  const adapter = new SlowAdapter()
+  const run = {
+    nonce: "long",
+    ticketDigest: "b".repeat(64),
+    nickname: "Runner",
+    score: 3,
+    survivalTicks: 4,
+    submittedAt: "2026-01-01T00:00:00.000Z",
+  }
+  const active = new RankingStore(adapter, () => 0).publish(run)
+  await new Promise<void>((resolve) => setTimeout(resolve, 0))
+  await expect(new RankingStore(adapter, () => 9_500).publish(run)).rejects.toThrow("lease")
+  release?.()
+  await expect(active).resolves.toEqual(run)
 })

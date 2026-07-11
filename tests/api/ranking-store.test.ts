@@ -141,10 +141,9 @@ describe("ranking store", () => {
       "put",
       "put",
       "delete",
-      "delete",
+      "put",
     ])
-    expect(operations.every((value) => !value.startsWith("put") || value.endsWith("false"))).toBe(
-      true,
-    )
+    expect(operations.slice(0, 4).every((value) => value.endsWith("false"))).toBe(true)
+    expect(operations.at(-1)?.endsWith("true")).toBe(true)
   })
 })

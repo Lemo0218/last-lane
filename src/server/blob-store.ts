@@ -1,42 +1,32 @@
 import { randomUUID } from "node:crypto"
-import { del, get, list, put } from "@vercel/blob"
-import { z } from "zod"
+import { BlobPreconditionFailedError, del, get, list, put } from "@vercel/blob"
 import { type RankedRun, rankedRunSchema } from "../api/contracts"
 
-export type PutOptions = Readonly<{ allowOverwrite: boolean }>
-export type Stored = Readonly<{ pathname: string; uploadedAt: number; body: string }>
-export interface BlobAdapter {
-  put(path: string, body: string, options: PutOptions): Promise<void>
-  get(path: string): Promise<Stored | undefined>
-  list(prefix: string, limit: number): Promise<readonly Stored[]>
-  delete(path: string): Promise<void>
-}
+export {
+  type BlobAdapter,
+  BlobConflictError,
+  RankingConflictError,
+  RankingLeaseError,
+} from "./blob-contract"
 
-export class BlobConflictError extends Error {
-  constructor() {
-    super("blob conflict")
-    this.name = "BlobConflictError"
-  }
-}
-export class RankingConflictError extends Error {
-  constructor() {
-    super("nonce conflict")
-    this.name = "RankingConflictError"
-  }
-}
-export class RankingLeaseError extends Error {
-  constructor() {
-    super("ranking lease unavailable")
-    this.name = "RankingLeaseError"
-  }
-}
+import {
+  type BlobAdapter,
+  BlobConflictError,
+  type PutOptions,
+  RankingConflictError,
+  type Stored,
+} from "./blob-contract"
+import { withPublicationLease } from "./publication-lease"
 
 export class InMemoryBlobAdapter implements BlobAdapter {
   readonly #objects = new Map<string, Stored>()
   constructor(readonly now: () => number = Date.now) {}
   async put(path: string, body: string, options: PutOptions): Promise<void> {
+    const current = this.#objects.get(path)
+    if (options.ifMatch !== undefined && current?.etag !== options.ifMatch)
+      throw new BlobConflictError()
     if (!options.allowOverwrite && this.#objects.has(path)) throw new BlobConflictError()
-    this.#objects.set(path, { pathname: path, uploadedAt: this.now(), body })
+    this.#objects.set(path, { pathname: path, uploadedAt: this.now(), body, etag: randomUUID() })
   }
   async get(path: string): Promise<Stored | undefined> {
     return this.#objects.get(path)
@@ -55,12 +45,18 @@ export class InMemoryBlobAdapter implements BlobAdapter {
 export class VercelBlobAdapter implements BlobAdapter {
   async put(path: string, body: string, options: PutOptions): Promise<void> {
     try {
-      await put(path, body, {
+      const baseOptions = {
         access: "public",
         addRandomSuffix: false,
         allowOverwrite: options.allowOverwrite,
-      })
+      } as const
+      await put(
+        path,
+        body,
+        options.ifMatch === undefined ? baseOptions : { ...baseOptions, ifMatch: options.ifMatch },
+      )
     } catch (error) {
+      if (error instanceof BlobPreconditionFailedError) throw new BlobConflictError()
       if (error instanceof Error && error.message.toLowerCase().includes("exist"))
         throw new BlobConflictError()
       throw error
@@ -73,6 +69,7 @@ export class VercelBlobAdapter implements BlobAdapter {
       pathname: path,
       uploadedAt: Date.now(),
       body: await new Response(result.stream).text(),
+      etag: result.blob.etag,
     }
   }
   async list(prefix: string, limit: number): Promise<readonly Stored[]> {
@@ -113,7 +110,9 @@ export class RankingStore {
     readonly now: () => number = Date.now,
   ) {}
   async repairExisting(run: RankedRun): Promise<RankedRun | undefined> {
-    return this.withLease(run.nonce, () => this.repairExistingLocked(run))
+    return withPublicationLease(this.adapter, this.now, run.nonce, () =>
+      this.repairExistingLocked(run),
+    )
   }
   private async repairExistingLocked(run: RankedRun): Promise<RankedRun | undefined> {
     const completed = await this.adapter.get(`runs/${run.nonce}.json`)
@@ -131,7 +130,7 @@ export class RankingStore {
     return storedRun
   }
   async publish(run: RankedRun): Promise<RankedRun> {
-    return this.withLease(run.nonce, () => this.publishLocked(run))
+    return withPublicationLease(this.adapter, this.now, run.nonce, () => this.publishLocked(run))
   }
   private async publishLocked(run: RankedRun): Promise<RankedRun> {
     const runPath = `runs/${run.nonce}.json`
@@ -177,18 +176,23 @@ export class RankingStore {
       failed = 0
     for (const item of await this.adapter.list("pending/", 100)) {
       const candidate = rankedRunSchema.parse(JSON.parse(item.body))
-      const result = await this.withLease(candidate.nonce, async () => {
-        const current = await this.adapter.get(item.pathname)
-        if (current === undefined) return "missing" as const
-        const run = rankedRunSchema.parse(JSON.parse(current.body))
-        if (now - current.uploadedAt > 24 * 60 * 60 * 1_000) {
-          await this.putMatching(`failed/${run.nonce}.json`, run)
-          await this.adapter.delete(item.pathname)
-          return "failed" as const
-        }
-        await this.project(run, item.pathname)
-        return "repaired" as const
-      })
+      const result = await withPublicationLease(
+        this.adapter,
+        this.now,
+        candidate.nonce,
+        async () => {
+          const current = await this.adapter.get(item.pathname)
+          if (current === undefined) return "missing" as const
+          const run = rankedRunSchema.parse(JSON.parse(current.body))
+          if (now - current.uploadedAt > 24 * 60 * 60 * 1_000) {
+            await this.putMatching(`failed/${run.nonce}.json`, run)
+            await this.adapter.delete(item.pathname)
+            return "failed" as const
+          }
+          await this.project(run, item.pathname)
+          return "repaired" as const
+        },
+      )
       if (result === "failed") failed += 1
       if (result === "repaired") repaired += 1
     }
@@ -203,35 +207,4 @@ export class RankingStore {
       if (existing === undefined || !same(existing, run)) throw new RankingConflictError()
     }
   }
-  private async withLease<T>(nonce: string, operation: () => Promise<T>): Promise<T> {
-    const path = `locks/${nonce}`
-    const owner = randomUUID()
-    for (let attempt = 0; attempt < 8; attempt += 1) {
-      const expiresAt = this.now() + 5_000
-      try {
-        await this.adapter.put(path, JSON.stringify({ owner, expiresAt }), {
-          allowOverwrite: false,
-        })
-        try {
-          return await operation()
-        } finally {
-          const held = await this.adapter.get(path)
-          const parsed =
-            held === undefined ? undefined : leaseSchema.safeParse(JSON.parse(held.body))
-          if (parsed?.success === true && parsed.data.owner === owner)
-            await this.adapter.delete(path)
-        }
-      } catch (error) {
-        if (!(error instanceof BlobConflictError)) throw error
-        const held = await this.adapter.get(path)
-        const parsed = held === undefined ? undefined : leaseSchema.safeParse(JSON.parse(held.body))
-        if (parsed?.success === true && parsed.data.expiresAt < this.now())
-          await this.adapter.delete(path)
-        await new Promise<void>((resolve) => setTimeout(resolve, 5))
-      }
-    }
-    throw new RankingLeaseError()
-  }
 }
-
-const leaseSchema = z.object({ owner: z.string().uuid(), expiresAt: z.number().int() })
