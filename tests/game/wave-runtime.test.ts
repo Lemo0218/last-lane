@@ -1,9 +1,14 @@
 import { describe, expect, it } from "vitest"
 import { scoreForCombat } from "../../src/game/GameCanvas"
 import { createProductionWaveState, stepProductionWave } from "../../src/game/production-wave"
-import type { SolverResult } from "../../src/game/solver"
+import { type SolverResult, solveWave } from "../../src/game/solver"
 import { createWaveRuntime, type WaveRuntimeDependencies } from "../../src/game/wave-runtime"
-import type { EntryState, WaveSegment, WaveWitness } from "../../src/game/waves"
+import {
+  type EntryState,
+  replayWitness,
+  type WaveSegment,
+  type WaveWitness,
+} from "../../src/game/waves"
 
 const segment: WaveSegment = { id: "accepted", horizonMs: 6_000, blockers: [], gates: [] }
 const witness: WaveWitness = {
@@ -16,6 +21,35 @@ const witness: WaveWitness = {
 }
 
 describe("wave runtime", () => {
+  it("returns production-replayed combat fallback when the four millisecond solver times out", () => {
+    // Given: a fifth-wave candidate and a clock already at its deadline
+    const entry: EntryState = {
+      squad: 3,
+      upgrades: { troop: 0, damage: 0, fireRate: 0, recovery: 0 },
+      x: 500,
+      velocity: 0,
+      playfieldWidth: 1000,
+      playerRadius: 12,
+      blockerRadius: 12,
+      precedingSegments: [],
+    }
+    const rejected: WaveSegment = {
+      id: "boss-5",
+      horizonMs: 12_000,
+      blockers: [],
+      gates: [],
+    }
+
+    // When: the default-shaped solver is forced to time out
+    const result = solveWave(entry, rejected, { budgetMs: 0, clock: { now: () => 0 } })
+
+    // Then: fallback retains boss combat, a visible gate, and a valid production replay
+    expect(result.kind).toBe("fallback")
+    expect(result.segment.id).toBe("fallback-boss-5")
+    expect(result.segment.blockers).toHaveLength(1)
+    expect(result.segment.gates).toHaveLength(1)
+    expect(replayWitness(entry, result.segment, result.witness).survived).toBe(true)
+  })
   it("collects a swept gate during a forgiving approach window and preserves feedback", () => {
     // Given: a gate scheduled between fixed production ticks
     const entry: EntryState = {

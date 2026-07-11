@@ -98,7 +98,7 @@ const runtimeFrom = (
 
 const DEFAULT_DEPENDENCIES: WaveRuntimeDependencies = {
   candidate: generateWaveCandidate,
-  solve: (entry, segment) => solveWave(entry, segment, { budgetMs: 40 }),
+  solve: solveWave,
 }
 
 export const createWaveRuntime = (

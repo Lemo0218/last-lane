@@ -5,8 +5,10 @@ import { createGameAudio } from "./audio"
 import { advanceFrame, type FrameClock } from "./frame-clock"
 import { createInputController } from "./input"
 import { renderGame, resizeCanvas } from "./renderer"
+import { generateWaveCandidate } from "./segment-generator"
+import { solveWave } from "./solver"
 import type { SimulationState } from "./types"
-import { type ActiveWave, createWaveRuntime } from "./wave-runtime"
+import { type ActiveWave, createWaveRuntime, type WaveRuntimeDependencies } from "./wave-runtime"
 
 const INITIAL_STATS: HudStats = {
   score: 0,
@@ -72,9 +74,18 @@ export const GameCanvas = ({
     const input = createInputController(joystick)
     const audio = audioFactory()
     audioRef.current = audio
-    const deterministicBoss =
-      import.meta.env.DEV && new URLSearchParams(window.location.search).get("testMode") === "boss"
-    let runtime = createWaveRuntime(undefined, deterministicBoss ? 4 : 0)
+    const testMode = import.meta.env.DEV
+      ? new URLSearchParams(window.location.search).get("testMode")
+      : null
+    const deterministicBoss = testMode === "boss" || testMode === "timeout-boss"
+    const forcedTimeout: WaveRuntimeDependencies | undefined = testMode?.startsWith("timeout")
+      ? {
+          candidate: generateWaveCandidate,
+          solve: (entry, segment) =>
+            solveWave(entry, segment, { budgetMs: 0, clock: { now: () => 0 } }),
+        }
+      : undefined
+    let runtime = createWaveRuntime(forcedTimeout, deterministicBoss ? 4 : 0)
     let frame = 0
     let clock: FrameClock = { previous: performance.now(), accumulator: 0 }
     let kills = 0

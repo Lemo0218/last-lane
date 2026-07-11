@@ -1,5 +1,6 @@
+import { createProductionWaveState, stepProductionWave } from "./production-wave"
 import type { EntryState, WaveSegment, WaveWitness, WitnessFrame } from "./waves"
-import { NORMAL_HORIZON_MS, SOLVER_STEP_MS } from "./waves"
+import { BOSS_HORIZON_MS, NORMAL_HORIZON_MS, SOLVER_STEP_MS } from "./waves"
 
 export type FallbackPattern = Readonly<{
   id: string
@@ -27,51 +28,76 @@ export type FallbackPattern = Readonly<{
     ]
   }>
   precondition: (entry: EntryState) => boolean
-  segment: (entry: EntryState) => WaveSegment
-  witness: (entry: EntryState) => WaveWitness
+  segment: (entry: EntryState, waveIndex?: number) => WaveSegment
+  witness: (entry: EntryState, waveIndex?: number) => WaveWitness
 }>
 
-const openSegment = (): WaveSegment => ({
-  id: "fallback-open-corridor",
-  horizonMs: NORMAL_HORIZON_MS,
-  blockers: [],
-  gates: [],
-})
-
-const NEUTRAL_INPUTS = Object.freeze(
-  Array.from({ length: NORMAL_HORIZON_MS / 10 }, () =>
-    Object.freeze({ moveX: 0 as const, paused: false }),
-  ),
-)
-
-const neutralWitness = (entry: EntryState): WaveWitness => {
-  const frames: WitnessFrame[] = []
-  let x = entry.x
-  let currentVelocity = entry.velocity
-  let remainder = 0
-  for (let atMs = SOLVER_STEP_MS; atMs <= NORMAL_HORIZON_MS; atMs += SOLVER_STEP_MS) {
-    for (let tickIndex = 0; tickIndex < SOLVER_STEP_MS / 10; tickIndex += 1) {
-      const motion = remainder + currentVelocity / 100
-      const delta = Math.trunc(motion)
-      remainder = motion - delta
-      x = Math.max(0, Math.min(entry.playfieldWidth, x + delta))
-      if (x === 0 || x === entry.playfieldWidth) currentVelocity = 0
-    }
-    frames.push({ atMs, move: 0, x, velocity: currentVelocity, squad: entry.squad })
+const fallbackSegment = (entry: EntryState, waveIndex = 1): WaveSegment => {
+  const movesLeft = entry.x <= entry.playfieldWidth / 2
+  const gateKinds = ["troop", "damage", "fire-rate", "recovery"] as const
+  const boss = waveIndex % 5 === 0
+  const enemyX = movesLeft ? entry.playfieldWidth * 0.9 : entry.playfieldWidth * 0.1
+  return {
+    id: `fallback-${boss ? "boss" : "wave"}-${waveIndex}`,
+    horizonMs: boss ? BOSS_HORIZON_MS : NORMAL_HORIZON_MS,
+    blockers: [
+      {
+        fromMs: 1_500,
+        toMs: 1_500,
+        minX: Math.max(0, enemyX - 20),
+        maxX: Math.min(entry.playfieldWidth, enemyX + 20),
+        damage: boss ? 2 : 1,
+      },
+    ],
+    gates: [
+      {
+        id: `fallback-gate-${waveIndex}`,
+        atMs: 4_200,
+        x: movesLeft ? 0 : entry.playfieldWidth,
+        radius: 80,
+        kind: gateKinds[(waveIndex - 1) % gateKinds.length] ?? "troop",
+        level: 1,
+      },
+    ],
   }
+}
+
+const productionWitness = (entry: EntryState, waveIndex = 1): WaveWitness => {
+  const segment = fallbackSegment(entry, waveIndex)
+  const move = entry.x <= entry.playfieldWidth / 2 ? (-1 as const) : (1 as const)
+  const frames: WitnessFrame[] = []
+  const productionInputs = []
+  let production = createProductionWaveState(entry)
+  for (let atMs = 10; atMs <= segment.horizonMs; atMs += 10) {
+    const moveX = atMs <= 250 ? (0 as const) : move
+    const input = { moveX, paused: false } as const
+    production = stepProductionWave(entry, segment, production, input)
+    productionInputs.push(input)
+    if (atMs % SOLVER_STEP_MS === 0) {
+      const simulation = production.simulation
+      frames.push({
+        atMs,
+        move,
+        x: simulation.playerX,
+        velocity: simulation.playerVelocity,
+        squad: simulation.squad,
+      })
+    }
+  }
+  const simulation = production.simulation
   return {
     frames,
-    productionInputs: NEUTRAL_INPUTS,
-    finalSquad: entry.squad,
-    finalX: x,
-    finalVelocity: currentVelocity,
-    collectedGateIds: [],
+    productionInputs,
+    finalSquad: simulation.squad,
+    finalX: simulation.playerX,
+    finalVelocity: simulation.playerVelocity,
+    collectedGateIds: [...production.collectedGateIds],
   }
 }
 
 export const fallbackPatterns: readonly FallbackPattern[] = [
   {
-    id: "open-corridor",
+    id: "production-combat",
     bounds: {
       squad: [1, Number.MAX_SAFE_INTEGER],
       x: [0, "playfieldWidth"],
@@ -133,13 +159,14 @@ export const fallbackPatterns: readonly FallbackPattern[] = [
       entry.playfieldWidth > entry.playerRadius * 2 &&
       entry.x >= 0 &&
       entry.x <= entry.playfieldWidth,
-    segment: openSegment,
-    witness: neutralWitness,
+    segment: fallbackSegment,
+    witness: productionWitness,
   },
 ] as const
 
 export const fallbackFor = (
   entry: EntryState,
+  rejectedSegment?: WaveSegment,
 ): Readonly<{
   patternId: string
   segment: WaveSegment
@@ -147,5 +174,11 @@ export const fallbackFor = (
 }> => {
   const pattern = fallbackPatterns.find((candidate) => candidate.precondition(entry))
   if (pattern === undefined) throw new RangeError("entry state has no safe fallback")
-  return { patternId: pattern.id, segment: pattern.segment(entry), witness: pattern.witness(entry) }
+  const matched = rejectedSegment === undefined ? undefined : /(\d+)$/.exec(rejectedSegment.id)
+  const waveIndex = matched?.[1] === undefined ? 1 : Math.max(1, Number(matched[1]))
+  return {
+    patternId: pattern.id,
+    segment: pattern.segment(entry, waveIndex),
+    witness: pattern.witness(entry, waveIndex),
+  }
 }

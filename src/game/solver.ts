@@ -95,7 +95,7 @@ const fallbackResult = (
   clock: Clock,
   startedAt: number,
 ): SolverResult => {
-  const fallback = fallbackFor(entry)
+  const fallback = fallbackFor(entry, segment)
   return {
     kind: "fallback",
     rejectedSegment: segment,

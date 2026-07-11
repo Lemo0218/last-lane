@@ -39,7 +39,7 @@ test("plays with the touch joystick and pauses and resumes on mobile", async ({ 
 
 test("materializes boss combat and moves through touch pointer input", async ({ page }) => {
   // Given: deterministic boss mode starts on the fifth wave
-  await page.goto("/?testMode=boss")
+  await page.goto("/?testMode=timeout-boss")
   await page.getByRole("button", { name: "게임 시작" }).click()
   const game = page.locator(".game-shell")
   const joystick = page.getByRole("slider", { name: "이동 조이스틱" })
