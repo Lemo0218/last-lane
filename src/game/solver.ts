@@ -113,7 +113,10 @@ export const solveWave = (
   const budgetMs = options.budgetMs ?? 4
   const startedAt = clock.now()
   const deadline = startedAt + budgetMs / 2
-  if (!hasContinuousEntry(entry) || !hasEscapeCorridor(entry, segment))
+  if (
+    !hasContinuousEntry(entry) ||
+    !hasEscapeCorridor(entry, segment, () => clock.now() >= deadline)
+  )
     return fallbackResult(entry, segment, clock, startedAt)
   let bestWitness: WaveWitness | undefined
   const retainBest = (witness: WaveWitness): void => {

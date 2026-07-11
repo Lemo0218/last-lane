@@ -34,6 +34,6 @@ it.each([
   const wallStartedAt = performance.now()
   const result = solveWave(state, segment)
   const wallElapsedMs = performance.now() - wallStartedAt
-  expect(wallElapsedMs).toBeLessThan(50)
+  expect(wallElapsedMs).toBeLessThanOrEqual(4)
   expect(result.kind).toBe("fallback")
 })

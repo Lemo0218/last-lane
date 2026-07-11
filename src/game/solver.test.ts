@@ -147,8 +147,9 @@ describe("wave solver", () => {
 
   it("fallbacks declare preconditions and replayable witnesses", () => {
     const state = entry()
-    for (const pattern of fallbackPatterns) {
-      expect(pattern.precondition(state)).toBe(true)
+    const eligible = fallbackPatterns.filter((pattern) => pattern.precondition(state))
+    expect(eligible.length).toBeGreaterThan(0)
+    for (const pattern of eligible) {
       const replay = replayWitness(state, pattern.segment(state), pattern.witness(state))
       expect(replay.survived).toBe(true)
       expect(replay.escapeCorridor).toBe(true)

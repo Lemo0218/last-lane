@@ -90,11 +90,17 @@ const freeIntervals = (
   return free
 }
 
-export const hasEscapeCorridor = (entry: EntryState, segment: WaveSegment): boolean => {
+export const hasEscapeCorridor = (
+  entry: EntryState,
+  segment: WaveSegment,
+  shouldAbort: () => boolean = () => false,
+): boolean => {
   let reachable: readonly [number, number][] = [[entry.x, entry.x]]
   for (let atMs = 10; atMs <= segment.horizonMs; atMs += 10) {
+    if (shouldAbort()) return false
     const next: [number, number][] = []
     for (const [minimum, maximum] of reachable) {
+      if (shouldAbort()) return false
       for (const [freeMinimum, freeMaximum] of freeIntervals(entry, segment, atMs)) {
         const low = Math.max(freeMinimum, minimum - 5)
         const high = Math.min(freeMaximum, maximum + 5)

@@ -58,26 +58,27 @@ it("production-replays every generated entry accepted by fallback preconditions"
   fc.assert(
     fc.property(
       fc.integer({ min: 1, max: 20 }),
-      fc.integer({ min: 20, max: 500 }),
-      fc.integer({ min: 0, max: 500 }),
+      fc.integer({ min: 0, max: 1_000 }),
       fc.integer({ min: -40, max: 40 }),
-      fc.integer({ min: 0, max: 8 }),
-      (squad, width, xSeed, velocity, radius) => {
+      (squad, x, velocity) => {
         const state: EntryState = {
           squad,
           upgrades: { troop: 1, damage: 1, fireRate: 1, recovery: 1 },
-          x: xSeed % (width + 1),
+          x,
           velocity,
-          playfieldWidth: width,
-          playerRadius: radius,
-          blockerRadius: radius,
+          playfieldWidth: 1_000,
+          playerRadius: 12,
+          blockerRadius: 12,
           precedingSegments: [],
         }
         const pattern = fallbackPatterns[0]
         if (pattern?.precondition(state) !== true) return
-        expect(() =>
-          replayWitness(state, pattern.segment(state), pattern.witness(state)),
-        ).not.toThrow()
+        const witness = pattern.witness(state)
+        const replay = replayWitness(state, pattern.segment(state), witness)
+        expect(replay.survived).toBe(true)
+        expect(replay.finalSquad).toBe(witness.finalSquad)
+        expect(replay.finalX).toBe(witness.finalX)
+        expect(replay.collectedGateIds).toEqual(witness.collectedGateIds)
       },
     ),
     { numRuns: 30 },

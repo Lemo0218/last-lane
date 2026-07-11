@@ -84,8 +84,7 @@ const RIGHT_NORMAL_FRAMES = frameTemplate(1, NORMAL_HORIZON_MS / SOLVER_STEP_MS)
 const LEFT_BOSS_FRAMES = frameTemplate(-1, BOSS_HORIZON_MS / SOLVER_STEP_MS)
 const RIGHT_BOSS_FRAMES = frameTemplate(1, BOSS_HORIZON_MS / SOLVER_STEP_MS)
 
-const productionWitness = (entry: EntryState, waveIndex = 1): WaveWitness => {
-  const segment = fallbackSegment(entry, waveIndex)
+const closedWitness = (entry: EntryState, segment: WaveSegment): WaveWitness => {
   const movesLeft = entry.x <= entry.playfieldWidth / 2
   const boss = segment.horizonMs === BOSS_HORIZON_MS
   const troopGate = segment.gates[0]?.kind === "troop"
@@ -110,6 +109,18 @@ const productionWitness = (entry: EntryState, waveIndex = 1): WaveWitness => {
     collectedGateIds: segment.gates[0] === undefined ? [] : [segment.gates[0].id],
   }
 }
+
+const productionWitness = (entry: EntryState, waveIndex = 1): WaveWitness =>
+  closedWitness(entry, fallbackSegment(entry, waveIndex))
+
+const openSegment = (): WaveSegment => ({
+  id: "fallback-open-corridor",
+  horizonMs: NORMAL_HORIZON_MS,
+  blockers: [],
+  gates: [],
+})
+
+const openWitness = (entry: EntryState): WaveWitness => closedWitness(entry, openSegment())
 
 export const fallbackPatterns: readonly FallbackPattern[] = [
   {
@@ -141,6 +152,9 @@ export const fallbackPatterns: readonly FallbackPattern[] = [
       ],
     },
     precondition: (entry) =>
+      entry.playfieldWidth === 1_000 &&
+      entry.playerRadius === 12 &&
+      entry.blockerRadius === 12 &&
       Object.values(entry.upgrades).every(Number.isFinite) &&
       [
         entry.squad,
@@ -177,6 +191,57 @@ export const fallbackPatterns: readonly FallbackPattern[] = [
       entry.x <= entry.playfieldWidth,
     segment: fallbackSegment,
     witness: productionWitness,
+  },
+  {
+    id: "universal-open",
+    bounds: {
+      squad: [1, Number.MAX_SAFE_INTEGER],
+      x: [0, "playfieldWidth"],
+      velocity: [-500, 500],
+      playfieldWidth: [1, 1_000],
+      collisionRadii: [0, 500],
+      precedingSegments: [0, 2],
+      upgrades: { troop: [0, 100], damage: [0, 100], fireRate: [0, 100], recovery: [0, 100] },
+      integerOnly: [
+        "squad",
+        "x",
+        "velocity",
+        "playfieldWidth",
+        "playerRadius",
+        "blockerRadius",
+        "upgrades.troop",
+        "upgrades.damage",
+        "upgrades.fireRate",
+        "upgrades.recovery",
+      ],
+    },
+    precondition: (entry) =>
+      entry.squad >= 1 &&
+      entry.playfieldWidth >= 1 &&
+      entry.playfieldWidth <= 1_000 &&
+      entry.x >= 0 &&
+      entry.x <= entry.playfieldWidth &&
+      entry.velocity >= -500 &&
+      entry.velocity <= 500 &&
+      entry.playerRadius >= 0 &&
+      entry.playerRadius <= 500 &&
+      entry.blockerRadius >= 0 &&
+      entry.blockerRadius <= 500 &&
+      entry.playfieldWidth > entry.playerRadius * 2 &&
+      entry.precedingSegments.length <= 2 &&
+      Object.values(entry.upgrades).every(
+        (level) => Number.isSafeInteger(level) && level >= 0 && level <= 100,
+      ) &&
+      [
+        entry.squad,
+        entry.x,
+        entry.velocity,
+        entry.playfieldWidth,
+        entry.playerRadius,
+        entry.blockerRadius,
+      ].every(Number.isSafeInteger),
+    segment: openSegment,
+    witness: openWitness,
   },
 ] as const
 

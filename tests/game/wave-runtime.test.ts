@@ -21,6 +21,40 @@ const witness: WaveWitness = {
 }
 
 describe("wave runtime", () => {
+  it("aborts corridor expansion inside the shared four millisecond deadline", () => {
+    // Given: a clock that consumes one millisecond per corridor check
+    let now = 0
+    const entry: EntryState = {
+      squad: 1,
+      upgrades: { troop: 0, damage: 0, fireRate: 0, recovery: 0 },
+      x: 500,
+      velocity: 0,
+      playfieldWidth: 1_000,
+      playerRadius: 12,
+      blockerRadius: 12,
+      precedingSegments: [],
+    }
+    const worst: WaveSegment = {
+      id: "wave-1",
+      horizonMs: 12_000,
+      blockers: Array.from({ length: 120 }, (_, index) => ({
+        fromMs: index * 100,
+        toMs: index * 100 + 100,
+        minX: index % 2 === 0 ? 0 : 550,
+        maxX: index % 2 === 0 ? 450 : 1_000,
+        damage: 1,
+      })),
+      gates: [],
+    }
+
+    // When: corridor expansion reaches the injected deadline
+    const result = solveWave(entry, worst, { clock: { now: () => (now += 1) } })
+
+    // Then: it immediately selects the compatible fallback within total budget
+    expect(result.kind).toBe("fallback")
+    expect(result.elapsedMs).toBeLessThanOrEqual(4)
+    expect(now).toBeLessThanOrEqual(5)
+  })
   it("returns production-replayed combat fallback when the four millisecond solver times out", () => {
     // Given: a fifth-wave candidate and a clock already at its deadline
     const entry: EntryState = {
