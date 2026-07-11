@@ -10,7 +10,7 @@ describe("App", () => {
     render(<App />)
 
     // Then: the game identity and primary action are available
-    expect(screen.getByRole("heading", { name: "LAST LANE" })).toBeInTheDocument()
+    expect(screen.getByRole("heading", { name: "라스트 레인 LAST LANE" })).toBeInTheDocument()
     expect(screen.getByRole("button", { name: "게임 시작" })).toBeInTheDocument()
   })
 })
