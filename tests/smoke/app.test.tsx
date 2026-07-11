@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react"
+import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { describe, expect, it, vi } from "vitest"
 
 import { App } from "../../src/App"
@@ -14,13 +14,17 @@ describe("App", () => {
     expect(screen.getByRole("button", { name: "게임 시작" })).toBeInTheDocument()
   })
 
-  it("exposes the mobile gameplay HUD joystick pause and sound controls", () => {
+  it("exposes the mobile gameplay HUD joystick pause and sound controls", async () => {
     // Given: the player starts a run
     vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(null)
     render(<App />)
+    fireEvent.click(screen.getByRole("button", { name: "확인" }))
     fireEvent.click(screen.getByRole("button", { name: "게임 시작" }))
 
     // When: gameplay is visible and the pause control is activated
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "게임 일시정지" })).toBeInTheDocument(),
+    )
     fireEvent.click(screen.getByRole("button", { name: "게임 일시정지" }))
 
     // Then: every HUD field, canvas, joystick, dialog and 44px control is accessible

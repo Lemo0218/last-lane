@@ -24,6 +24,7 @@ body {
 
 button {
   font: inherit;
+  min-height: 44px;
 }
 
 .sr-only {
@@ -103,4 +104,170 @@ h1 {
 .play-button:focus-visible {
   outline: 3px solid #f1bd4c;
   outline-offset: 4px;
+}
+
+.tutorial {
+  position: fixed;
+  z-index: 20;
+  inset: 50% auto auto 50%;
+  width: min(calc(100% - 32px), 380px);
+  padding: 28px;
+  border: 1px solid rgb(103 247 240 / 45%);
+  border-radius: 20px;
+  color: #eafafb;
+  background: #0b2025;
+  box-shadow:
+    0 0 0 100vmax rgb(0 0 0 / 72%),
+    0 24px 80px #000;
+  transform: translate(-50%, -50%);
+}
+
+.tutorial h2,
+.result-card h2 {
+  margin: 0 0 20px;
+  font-size: 1.8rem;
+}
+.tutorial ol {
+  padding-left: 22px;
+  color: #b9cccf;
+  line-height: 1.8;
+}
+.status-pill {
+  display: inline-flex;
+  margin: 0 0 20px;
+  padding: 7px 12px;
+  border: 1px solid #f1bd4c66;
+  border-radius: 999px;
+  color: #ffd980;
+  background: #2c2417;
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+.status-pill.online {
+  border-color: #55e9e466;
+  color: #76fbf5;
+  background: #123135;
+}
+.primary-action,
+.secondary-action,
+.text-action {
+  width: 100%;
+  margin-top: 10px;
+  border-radius: 12px;
+  font-weight: 850;
+  cursor: pointer;
+}
+.primary-action {
+  border: 0;
+  color: #041416;
+  background: #55e9e4;
+}
+.secondary-action {
+  border: 1px solid #55e9e4;
+  color: #dffffe;
+  background: transparent;
+}
+.text-action {
+  border: 0;
+  color: #a9bec2;
+  background: transparent;
+}
+.primary-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+.panel-screen {
+  display: grid;
+  min-height: 100svh;
+  padding: max(20px, env(safe-area-inset-top)) 18px max(20px, env(safe-area-inset-bottom));
+  place-items: center;
+  background: radial-gradient(circle at 50% 0, #14343a, #071418 55%);
+}
+.result-card {
+  width: min(100%, 420px);
+  padding: 30px 24px;
+  border: 1px solid #55e9e444;
+  border-radius: 24px;
+  background: #091c20f2;
+  box-shadow: 0 24px 70px #0008;
+}
+.total-score {
+  display: block;
+  color: #67f7f0;
+  font-size: 3.4rem;
+  line-height: 1;
+  text-align: center;
+}
+.personal-best,
+.rank-badge {
+  color: #f1bd4c;
+  font-weight: 800;
+  text-align: center;
+}
+.score-breakdown {
+  display: grid;
+  gap: 8px;
+  margin: 22px 0;
+}
+.score-breakdown div {
+  display: flex;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #10282d;
+}
+.score-breakdown dd {
+  margin: 0;
+  font-weight: 800;
+}
+.nickname-field {
+  display: grid;
+  gap: 7px;
+  color: #a9bec2;
+  font-size: 0.84rem;
+  font-weight: 800;
+}
+.nickname-field input {
+  min-height: 48px;
+  padding: 0 13px;
+  border: 1px solid #46666b;
+  border-radius: 10px;
+  color: #f4fbfc;
+  background: #071418;
+  font: inherit;
+}
+.leaderboard-list {
+  display: grid;
+  gap: 8px;
+  padding: 0;
+  list-style: none;
+}
+.leaderboard-list li {
+  display: grid;
+  grid-template-columns: 48px 1fr auto;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 10px;
+  background: #10282d;
+}
+.muted-copy {
+  color: #a9bec2;
+  line-height: 1.6;
+}
+
+button:focus-visible,
+input:focus-visible {
+  outline: 3px solid #f1bd4c;
+  outline-offset: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto;
+    transition-duration: 0.01ms;
+    animation-duration: 0.01ms;
+    animation-iteration-count: 1;
+  }
 }

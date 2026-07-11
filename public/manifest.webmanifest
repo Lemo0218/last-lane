@@ -1,0 +1,26 @@
+{
+  "name": "라스트 레인 LAST LANE",
+  "short_name": "LAST LANE",
+  "description": "좀비가 점령한 최후의 도로에서 분대를 지키는 생존 슈터",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#071418",
+  "theme_color": "#071418",
+  "lang": "ko",
+  "icons": [
+    {
+      "src": "/icons/icon-192.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-512.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

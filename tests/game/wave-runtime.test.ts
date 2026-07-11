@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
-import { scoreForCombat } from "../../src/game/GameCanvas"
 import { createProductionWaveState, stepProductionWave } from "../../src/game/production-wave"
+import { scoreForCombat } from "../../src/game/run-summary"
 import { type SolverResult, solveWave } from "../../src/game/solver"
 import { createWaveRuntime, type WaveRuntimeDependencies } from "../../src/game/wave-runtime"
 import {

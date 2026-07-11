@@ -1,23 +1,16 @@
 import { useEffect, useRef, useState } from "react"
-import { Hud, type HudStats } from "../ui/Hud"
+import { Hud } from "../ui/Hud"
 import { PauseMenu } from "../ui/PauseMenu"
 import { createGameAudio } from "./audio"
 import { advanceFrame, type FrameClock } from "./frame-clock"
 import { createInputController } from "./input"
 import { renderGame, resizeCanvas } from "./renderer"
+import { INITIAL_STATS, scoreForCombat, statsOf } from "./run-summary"
 import { generateWaveCandidate } from "./segment-generator"
 import { solveWave } from "./solver"
-import type { SimulationState } from "./types"
-import { type ActiveWave, createWaveRuntime, type WaveRuntimeDependencies } from "./wave-runtime"
+import { createTranscriptRecorder, type Transcript } from "./transcript"
+import { createWaveRuntime, type WaveRuntimeDependencies } from "./wave-runtime"
 
-const INITIAL_STATS: HudStats = {
-  score: 0,
-  elapsedMs: 0,
-  squad: 3,
-  maximumSquad: 3,
-  combo: 0,
-  difficulty: 1,
-}
 type Telemetry = Readonly<{
   playerX: number
   wave: number
@@ -38,25 +31,20 @@ const INITIAL_TELEMETRY: Telemetry = {
   gates: 0,
   collectedGates: 0,
 }
-export const scoreForCombat = (state: SimulationState, kills: number): number =>
-  Math.floor(Number(state.distance) / 8) + kills * 100 + state.combo * 25
-
+const E2E_ENABLED = import.meta.env.VITE_E2E === "true"
 const reportAudioFailure = (error: unknown): void => {
   console.warn("게임 오디오를 사용할 수 없습니다.", error instanceof Error ? error.message : error)
 }
 
-const statsOf = (state: SimulationState, kills: number, active: ActiveWave): HudStats => ({
-  score: scoreForCombat(state, kills),
-  elapsedMs: active.elapsedBeforeMs + active.production.atMs,
-  squad: state.squad,
-  maximumSquad: state.maximumSquad,
-  combo: state.combo,
-  difficulty: active.index + 1,
-})
-
 export const GameCanvas = ({
   audioFactory = createGameAudio,
-}: Readonly<{ audioFactory?: typeof createGameAudio }>) => {
+  onFinish,
+}: Readonly<{
+  audioFactory?: typeof createGameAudio
+  onFinish?: (
+    result: Readonly<{ score: number; kills: number; elapsedMs: number; transcript: Transcript }>,
+  ) => void
+}>) => {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const joystickRef = useRef<HTMLDivElement>(null)
   const audioRef = useRef<ReturnType<typeof createGameAudio> | null>(null)
@@ -75,7 +63,7 @@ export const GameCanvas = ({
     const input = createInputController(joystick)
     const audio = audioFactory()
     audioRef.current = audio
-    const testMode = import.meta.env.DEV
+    const testMode = E2E_ENABLED
       ? new URLSearchParams(window.location.search).get("testMode")
       : null
     const deterministicBoss = testMode === "boss" || testMode === "timeout-boss"
@@ -90,6 +78,9 @@ export const GameCanvas = ({
     let frame = 0
     let clock: FrameClock = { previous: performance.now(), accumulator: 0 }
     let kills = 0
+    let tick = 0
+    let finished = false
+    const transcript = createTranscriptRecorder()
     let visible = !document.hidden
     let metrics = resizeCanvas(canvas)
     const resize = (): void => {
@@ -100,12 +91,24 @@ export const GameCanvas = ({
       const advanced = advanceFrame(clock, now, visible && !pausedRef.current)
       clock = advanced.clock
       for (let step = 0; step < advanced.steps; step += 1) {
-        runtime = runtime.step(input.current())
+        const currentInput = input.current()
+        transcript.record(tick, currentInput.moveX)
+        tick += 1
+        runtime = runtime.step(currentInput)
         const state = runtime.active.production.simulation
         kills += state.events.filter((event) => event.kind === "zombie-killed").length
         audio.play(state.events)
       }
       const state = runtime.active.production.simulation
+      if (!finished && state.status !== "running") {
+        finished = true
+        onFinish?.({
+          score: scoreForCombat(state, kills),
+          kills,
+          elapsedMs: runtime.active.elapsedBeforeMs + runtime.active.production.atMs,
+          transcript: transcript.snapshot(),
+        })
+      }
       if (context !== null) renderGame(context, state, metrics, reducedMotion, runtime.active)
       if (advanced.steps > 0) {
         setStats(statsOf(state, kills, runtime.active))
@@ -157,7 +160,7 @@ export const GameCanvas = ({
       void audio.close().catch(reportAudioFailure)
       audioRef.current = null
     }
-  }, [audioFactory])
+  }, [audioFactory, onFinish])
 
   const togglePause = (): void => {
     if (!pausedRef.current && document.activeElement instanceof HTMLElement)
@@ -173,15 +176,15 @@ export const GameCanvas = ({
   return (
     <main
       className="game-shell"
-      data-player-x={import.meta.env.DEV ? telemetry.playerX : undefined}
-      data-wave={import.meta.env.DEV ? telemetry.wave : undefined}
-      data-zombies={import.meta.env.DEV ? telemetry.zombies : undefined}
-      data-projectiles={import.meta.env.DEV ? telemetry.projectiles : undefined}
-      data-boss={import.meta.env.DEV ? telemetry.boss : undefined}
-      data-kills={import.meta.env.DEV ? telemetry.kills : undefined}
-      data-score={import.meta.env.DEV ? stats.score : undefined}
-      data-gates={import.meta.env.DEV ? telemetry.gates : undefined}
-      data-collected-gates={import.meta.env.DEV ? telemetry.collectedGates : undefined}
+      data-player-x={E2E_ENABLED ? telemetry.playerX : undefined}
+      data-wave={E2E_ENABLED ? telemetry.wave : undefined}
+      data-zombies={E2E_ENABLED ? telemetry.zombies : undefined}
+      data-projectiles={E2E_ENABLED ? telemetry.projectiles : undefined}
+      data-boss={E2E_ENABLED ? telemetry.boss : undefined}
+      data-kills={E2E_ENABLED ? telemetry.kills : undefined}
+      data-score={E2E_ENABLED ? stats.score : undefined}
+      data-gates={E2E_ENABLED ? telemetry.gates : undefined}
+      data-collected-gates={E2E_ENABLED ? telemetry.collectedGates : undefined}
     >
       <output className="sr-only" aria-live="polite">
         웨이브 {telemetry.wave}, 좀비 {telemetry.zombies}, 탄환 {telemetry.projectiles}
