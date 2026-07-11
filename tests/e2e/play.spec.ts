@@ -1,5 +1,7 @@
 import { expect, type Page, test } from "@playwright/test"
 
+test.setTimeout(30_000)
+
 const startRun = async (page: Page): Promise<void> => {
   await page.goto("/")
   await page.getByRole("button", { name: "확인" }).click()

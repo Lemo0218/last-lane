@@ -6,7 +6,7 @@ export default defineConfig({
   test: {
     environment: "jsdom",
     include: ["**/*.test.{ts,tsx}", "tests/api/verifier.bench.ts"],
-    exclude: ["tests/e2e/**", "node_modules/**", "dist/**"],
+    exclude: ["tests/e2e/**", "node_modules/**", "dist/**", "dev-dist/**", ".worktrees/**"],
     setupFiles: ["./tests/setup.ts"],
   },
 })

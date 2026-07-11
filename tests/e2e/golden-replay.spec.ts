@@ -1,6 +1,8 @@
 import { expect, test } from "@playwright/test"
 import fixture from "../fixtures/golden-replay.json" with { type: "json" }
 
+test.setTimeout(30_000)
+
 test("browser runtime reproduces the static golden replay", async ({ page }) => {
   await page.goto("/")
   const tutorial = page.getByRole("dialog", { name: "좌우로 길을 선택하세요" })
