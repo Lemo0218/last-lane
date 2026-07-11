@@ -115,18 +115,31 @@ export const solveWave = (
   const deadline = startedAt + budgetMs / 2
   if (!hasContinuousEntry(entry) || !hasEscapeCorridor(entry, segment))
     return fallbackResult(entry, segment, clock, startedAt)
+  let bestWitness: WaveWitness | undefined
+  const retainBest = (witness: WaveWitness): void => {
+    const replay = replayWitness(entry, segment, witness)
+    if (!replay.survived || !replay.continuous || !replay.escapeCorridor) return
+    if (bestWitness === undefined || witness.finalSquad > bestWitness.finalSquad)
+      bestWitness = witness
+  }
   for (const policy of moves) {
     let state: SearchState | null = initialState(entry)
     for (let atMs = SOLVER_STEP_MS; atMs <= segment.horizonMs; atMs += SOLVER_STEP_MS) {
       state = state === null ? null : expandAction(entry, segment, state, policy, deadline, clock)
-      if (state === null) return fallbackResult(entry, segment, clock, startedAt)
+      if (state === null) {
+        if (bestWitness !== undefined)
+          return {
+            kind: "accepted",
+            segment,
+            witness: bestWitness,
+            elapsedMs: clock.now() - startedAt,
+          }
+        return fallbackResult(entry, segment, clock, startedAt)
+      }
       if (state.production.simulation.squad < 1) break
     }
     if (state !== null && state.production.atMs === segment.horizonMs) {
-      const witness = witnessOf(state)
-      const replay = replayWitness(entry, segment, witness)
-      if (replay.survived && replay.continuous && replay.escapeCorridor)
-        return { kind: "accepted", segment, witness, elapsedMs: clock.now() - startedAt }
+      retainBest(witnessOf(state))
     }
   }
   let frontier: readonly SearchState[] = [initialState(entry)]
@@ -135,7 +148,16 @@ export const solveWave = (
     for (const state of frontier) {
       for (const move of moves) {
         const candidate = expandAction(entry, segment, state, move, deadline, clock)
-        if (candidate === null) return fallbackResult(entry, segment, clock, startedAt)
+        if (candidate === null) {
+          if (bestWitness !== undefined)
+            return {
+              kind: "accepted",
+              segment,
+              witness: bestWitness,
+              elapsedMs: clock.now() - startedAt,
+            }
+          return fallbackResult(entry, segment, clock, startedAt)
+        }
         if (candidate.production.simulation.squad < 1) continue
         const key = stateKey(candidate)
         const previous = deduplicated.get(key)
@@ -147,13 +169,13 @@ export const solveWave = (
       }
     }
     frontier = [...deduplicated.values()]
+      .sort((left, right) => right.production.simulation.squad - left.production.simulation.squad)
+      .slice(0, 4)
     if (frontier.length === 0) break
   }
-  const completed = frontier[0]
-  if (completed !== undefined && completed.production.atMs === segment.horizonMs) {
-    const witness = witnessOf(completed)
-    if (replayWitness(entry, segment, witness).survived)
-      return { kind: "accepted", segment, witness, elapsedMs: clock.now() - startedAt }
-  }
+  for (const completed of frontier)
+    if (completed.production.atMs === segment.horizonMs) retainBest(witnessOf(completed))
+  if (bestWitness !== undefined)
+    return { kind: "accepted", segment, witness: bestWitness, elapsedMs: clock.now() - startedAt }
   return fallbackResult(entry, segment, clock, startedAt)
 }

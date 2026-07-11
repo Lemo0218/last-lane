@@ -50,6 +50,7 @@ it("returns an accepted replay witness for varied exact legal entry states", () 
         }
       },
     ),
+    { numRuns: 30 },
   )
 })
 
@@ -79,6 +80,37 @@ it("production-replays every generated entry accepted by fallback preconditions"
         ).not.toThrow()
       },
     ),
+    { numRuns: 30 },
+  )
+})
+
+it("retains the least-damaged witness across surviving constant policies", () => {
+  fc.assert(
+    fc.property(
+      fc.integer({ min: 3, max: 20 }),
+      fc.integer({ min: 1, max: 2 }),
+      (squad, damage) => {
+        const state: EntryState = {
+          squad,
+          upgrades: { troop: 0, damage: 0, fireRate: 0, recovery: 0 },
+          x: 50,
+          velocity: 0,
+          playfieldWidth: 100,
+          playerRadius: 3,
+          blockerRadius: 3,
+          precedingSegments: [],
+        }
+        const segment: WaveSegment = {
+          id: "ranked",
+          horizonMs: 6_000,
+          blockers: [{ fromMs: 300, toMs: 310, minX: 0, maxX: 40, damage }],
+          gates: [],
+        }
+        const result = solveWave(state, segment, { clock: { now: () => 0 } })
+        expect(result.witness.finalSquad).toBe(squad)
+      },
+    ),
+    { numRuns: 30 },
   )
 })
 
@@ -119,5 +151,6 @@ it("composes recovery choice, entrance, and boss with one surviving offered choi
         }
       },
     ),
+    { numRuns: 30 },
   )
 })

@@ -218,17 +218,15 @@ export const stepSimulation = (
   }
   const runStatus = resolveRunStatus(state.status, squad, elapsedMs)
   if (runStatus.event !== undefined) events.push(runStatus.event)
+  const stoppedAtBoundary = playerX === WORLD_MIN_X || playerX === WORLD_MAX_X
   return {
     ...state,
     seed: nextRandom(state.seed).seed,
     elapsedMs: tick(elapsedMs),
     distance: position(state.distance + Math.abs(playerDelta)),
     playerX: position(playerX),
-    playerVelocity: velocity(
-      playerX === WORLD_MIN_X || playerX === WORLD_MAX_X ? 0 : playerVelocity,
-    ),
-    playerMotionRemainder:
-      playerX === WORLD_MIN_X || playerX === WORLD_MAX_X ? 0 : playerMotionRemainder,
+    playerVelocity: velocity(stoppedAtBoundary ? 0 : playerVelocity),
+    playerMotionRemainder: stoppedAtBoundary ? 0 : playerMotionRemainder,
     squad,
     maximumSquad: gates.maximumSquad,
     shotDamage: gates.shotDamage,

@@ -115,6 +115,20 @@ describe("wave solver", () => {
     expect(result.witness.collectedGateIds).toEqual(["wide-a", "wide-b"])
   })
 
+  it("selects the least-damaged witness among surviving policies", () => {
+    const state = entry({ squad: 5, x: 50 })
+    const segment: WaveSegment = {
+      id: "damage-ranking",
+      horizonMs: 6_000,
+      blockers: [{ fromMs: 300, toMs: 310, minX: 0, maxX: 40, damage: 1 }],
+      gates: [],
+    }
+    const result = solveWave(state, segment, { clock: { now: () => 0 } })
+    expect(result.kind).toBe("accepted")
+    expect(result.witness.finalSquad).toBe(5)
+    expect(result.witness.frames[2]?.move).toBe(0)
+  })
+
   it("chooses survival over a reward before a boss", () => {
     const segment: WaveSegment = {
       id: "boss",
