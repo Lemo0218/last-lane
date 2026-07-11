@@ -10,7 +10,11 @@ describe("ranking progression", () => {
     // Given
     const submit = vi.fn().mockRejectedValue(new TypeError("offline"))
     const queue = createRetryQueue({ storage: localStorage, now: () => 101 })
-    queue.enqueue({ ticket: { token: "t", deadlineMs: 100 }, nickname: "생존자", transcript: [] })
+    queue.enqueue({
+      ticket: { token: "t", deadlineMs: 100, seed: 1, ruleset: "last-lane-v1" },
+      nickname: "생존자",
+      transcript: { entries: [], endTick: 0 },
+    })
     // When
     await queue.flush(submit)
     // Then
@@ -22,7 +26,11 @@ describe("ranking progression", () => {
     // Given
     const submit = vi.fn().mockResolvedValue({ accepted: true, rank: 4 })
     const queue = createRetryQueue({ storage: localStorage, now: () => 10 })
-    queue.enqueue({ ticket: { token: "t", deadlineMs: 100 }, nickname: "생존자", transcript: [] })
+    queue.enqueue({
+      ticket: { token: "t", deadlineMs: 100, seed: 1, ruleset: "last-lane-v1" },
+      nickname: "생존자",
+      transcript: { entries: [], endTick: 0 },
+    })
     // When
     const accepted = await queue.flush(submit)
     // Then
@@ -31,9 +39,9 @@ describe("ranking progression", () => {
     expect(accepted).toEqual([
       {
         submission: {
-          ticket: { token: "t", deadlineMs: 100 },
+          ticket: { token: "t", deadlineMs: 100, seed: 1, ruleset: "last-lane-v1" },
           nickname: "생존자",
-          transcript: [],
+          transcript: { entries: [], endTick: 0 },
         },
         rank: 4,
       },
@@ -42,18 +50,23 @@ describe("ranking progression", () => {
 
   it("requests a ticket before a ranked run and submits only the proof payload", async () => {
     // Given
-    const requestTicket = vi.fn().mockResolvedValue({ token: "ticket", deadlineMs: 999 })
+    const requestTicket = vi
+      .fn()
+      .mockResolvedValue({ token: "ticket", deadlineMs: 999, seed: 1, ruleset: "last-lane-v1" })
     const submit = vi.fn().mockResolvedValue({ accepted: true, rank: 7 })
     const session = createRankedRun({ requestTicket, submit, enqueue: vi.fn(), now: () => 1 })
     // When
     await session.start()
-    const outcome = await session.finish("러너", [{ tick: 3, move: "R" }])
+    const outcome = await session.finish("러너", {
+      entries: [{ tick: 0, move: "R" }],
+      endTick: 3,
+    })
     // Then
     expect(requestTicket).toHaveBeenCalledOnce()
     expect(submit).toHaveBeenCalledWith({
-      ticket: { token: "ticket", deadlineMs: 999 },
+      ticket: { token: "ticket", deadlineMs: 999, seed: 1, ruleset: "last-lane-v1" },
       nickname: "러너",
-      transcript: [{ tick: 3, move: "R" }],
+      transcript: { entries: [{ tick: 0, move: "R" }], endTick: 3 },
     })
     expect(outcome).toEqual({ kind: "ranked", rank: 7 })
   })
@@ -62,14 +75,16 @@ describe("ranking progression", () => {
     // Given
     const enqueue = vi.fn()
     const session = createRankedRun({
-      requestTicket: vi.fn().mockResolvedValue({ token: "ticket", deadlineMs: 999 }),
+      requestTicket: vi
+        .fn()
+        .mockResolvedValue({ token: "ticket", deadlineMs: 999, seed: 1, ruleset: "last-lane-v1" }),
       submit: vi.fn().mockRejectedValue(new TypeError("offline")),
       enqueue,
       now: () => 1,
     })
     await session.start()
     // When
-    const outcome = await session.finish("러너", [])
+    const outcome = await session.finish("러너", { entries: [], endTick: 0 })
     // Then
     expect(outcome).toEqual({ kind: "queued", token: "ticket" })
     expect(enqueue).toHaveBeenCalledOnce()
@@ -92,14 +107,14 @@ describe("ranking progression", () => {
     // Given
     const requestTicket = vi
       .fn()
-      .mockResolvedValueOnce({ token: "stale", deadlineMs: 999 })
+      .mockResolvedValueOnce({ token: "stale", deadlineMs: 999, seed: 1, ruleset: "last-lane-v1" })
       .mockRejectedValueOnce(new Error("offline"))
     const submit = vi.fn()
     const session = createRankedRun({ requestTicket, submit, enqueue: vi.fn(), now: () => 1 })
     await session.start()
     // When
     await session.start()
-    const outcome = await session.finish("러너", [])
+    const outcome = await session.finish("러너", { entries: [], endTick: 0 })
     // Then
     expect(outcome).toEqual({ kind: "unranked" })
     expect(submit).not.toHaveBeenCalled()
@@ -109,15 +124,17 @@ describe("ranking progression", () => {
     // Given
     const submit = vi.fn().mockResolvedValue({ accepted: true, rank: 7 })
     const session = createRankedRun({
-      requestTicket: vi.fn().mockResolvedValue({ token: "once", deadlineMs: 999 }),
+      requestTicket: vi
+        .fn()
+        .mockResolvedValue({ token: "once", deadlineMs: 999, seed: 1, ruleset: "last-lane-v1" }),
       submit,
       enqueue: vi.fn(),
       now: () => 1,
     })
     await session.start()
     // When
-    const first = await session.finish("러너", [])
-    const duplicate = await session.finish("러너", [])
+    const first = await session.finish("러너", { entries: [], endTick: 0 })
+    const duplicate = await session.finish("러너", { entries: [], endTick: 0 })
     // Then
     expect(first).toEqual({ kind: "ranked", rank: 7 })
     expect(duplicate).toEqual({ kind: "unranked" })
@@ -129,16 +146,18 @@ describe("ranking progression", () => {
     let now = 100
     const submit = vi.fn().mockResolvedValue({ accepted: true, rank: 7 })
     const session = createRankedRun({
-      requestTicket: vi.fn().mockResolvedValue({ token: "expired", deadlineMs: 50 }),
+      requestTicket: vi
+        .fn()
+        .mockResolvedValue({ token: "expired", deadlineMs: 50, seed: 1, ruleset: "last-lane-v1" }),
       submit,
       enqueue: vi.fn(),
       now: () => now,
     })
     await session.start()
     // When
-    const expired = await session.finish("러너", [])
+    const expired = await session.finish("러너", { entries: [], endTick: 0 })
     now = 1
-    const repeated = await session.finish("러너", [])
+    const repeated = await session.finish("러너", { entries: [], endTick: 0 })
     // Then
     expect(expired).toEqual({ kind: "unranked" })
     expect(repeated).toEqual({ kind: "unranked" })
@@ -156,9 +175,9 @@ describe("ranking progression", () => {
     const client = createRankingClient(transport)
     // When
     const submitted = await client.submit({
-      ticket: { token: "t", deadlineMs: 4 },
+      ticket: { token: "t", deadlineMs: 4, seed: 1, ruleset: "last-lane-v1" },
       nickname: "나",
-      transcript: [],
+      transcript: { entries: [], endTick: 0 },
     })
     const board = await client.leaderboard()
     // Then
@@ -181,7 +200,13 @@ describe("ranking progression", () => {
     // Given
     const transport = {
       post: vi.fn().mockReturnValue({
-        json: () => Promise.resolve({ token: "signed-ticket", deadlineMs: 5000 }),
+        json: () =>
+          Promise.resolve({
+            token: "signed-ticket",
+            deadlineMs: 5000,
+            seed: 1,
+            ruleset: "last-lane-v1",
+          }),
       }),
       get: vi.fn(),
     }
@@ -190,7 +215,12 @@ describe("ranking progression", () => {
     const ticket = await client.requestTicket()
     // Then
     expect(transport.post).toHaveBeenCalledWith("/api/run-ticket")
-    expect(ticket).toEqual({ token: "signed-ticket", deadlineMs: 5000 })
+    expect(ticket).toEqual({
+      token: "signed-ticket",
+      deadlineMs: 5000,
+      seed: 1,
+      ruleset: "last-lane-v1",
+    })
   })
 
   it("recovers an invalid persisted retry queue without crashing", () => {

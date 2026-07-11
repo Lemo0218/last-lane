@@ -15,8 +15,8 @@ export type ProductionWaveState = Readonly<{
   collidedBlockerIds: ReadonlySet<string>
 }>
 
-export const createProductionWaveState = (entry: EntryState): ProductionWaveState => ({
-  simulation: createSimulation(1, entry.upgrades, {
+export const createProductionWaveState = (entry: EntryState, seed = 1): ProductionWaveState => ({
+  simulation: createSimulation(seed, entry.upgrades, {
     playerX: entry.x,
     playerVelocity: entry.velocity,
     squad: entry.squad,

@@ -27,13 +27,21 @@
     "src/server/**/*.ts",
     "src/game/config.ts",
     "src/game/gates.ts",
+    "src/game/fallback-types.ts",
+    "src/game/fallbacks.ts",
+    "src/game/production-wave.ts",
     "src/game/rng.ts",
     "src/game/run-status.ts",
+    "src/game/run-score.ts",
     "src/game/scoring.ts",
     "src/game/simulation.ts",
+    "src/game/segment-generator.ts",
+    "src/game/solver.ts",
     "src/game/state-validation.ts",
     "src/game/transcript.ts",
     "src/game/types.ts",
-    "src/game/validation.ts"
+    "src/game/validation.ts",
+    "src/game/wave-runtime.ts",
+    "src/game/waves.ts"
   ]
 }

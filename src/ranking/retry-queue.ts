@@ -3,7 +3,7 @@ import { type Submission, submissionSchema } from "./client"
 
 const queueKey = "last-lane:ranking-retry-v1"
 const queueSchema = z.array(submissionSchema).max(8)
-type AcceptedRetry = Readonly<{ submission: Submission; rank: number }>
+type AcceptedRetry = Readonly<{ submission: Submission; rank: number | null }>
 
 export const createRetryQueue = ({
   storage,
@@ -25,7 +25,7 @@ export const createRetryQueue = ({
   const removeToken = (token: string): void =>
     write(read().filter((item) => item.ticket.token !== token))
   const flushItems = async (
-    submit: (value: Submission) => Promise<Readonly<{ accepted: true; rank: number }>>,
+    submit: (value: Submission) => Promise<Readonly<{ accepted: true; rank: number | null }>>,
   ): Promise<readonly AcceptedRetry[]> => {
     const accepted: AcceptedRetry[] = []
     for (const item of read()) {
@@ -53,7 +53,7 @@ export const createRetryQueue = ({
       ),
     size: (): number => read().length,
     flush: (
-      submit: (value: Submission) => Promise<Readonly<{ accepted: true; rank: number }>>,
+      submit: (value: Submission) => Promise<Readonly<{ accepted: true; rank: number | null }>>,
     ): Promise<readonly AcceptedRetry[]> => {
       if (activeFlush !== undefined) return activeFlush
       activeFlush = flushItems(submit).finally(() => {

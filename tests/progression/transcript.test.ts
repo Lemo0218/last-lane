@@ -13,10 +13,14 @@ describe("transcript recorder", () => {
     recorder.record(3, 0)
     recorder.record(4, 1)
     // Then
-    expect(recorder.snapshot()).toEqual([
-      { tick: 1, move: "L" },
-      { tick: 3, move: "N" },
-      { tick: 4, move: "R" },
-    ])
+    expect(recorder.snapshot(9)).toEqual({
+      entries: [
+        { tick: 0, move: "N" },
+        { tick: 1, move: "L" },
+        { tick: 3, move: "N" },
+        { tick: 4, move: "R" },
+      ],
+      endTick: 9,
+    })
   })
 })

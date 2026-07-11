@@ -1,10 +1,10 @@
 import type { EntryState, WaveSegment } from "./waves"
 import { BOSS_HORIZON_MS, NORMAL_HORIZON_MS } from "./waves"
 
-export const generateWaveCandidate = (entry: EntryState, index: number): WaveSegment => {
+export const generateWaveCandidate = (entry: EntryState, index: number, seed = 0): WaveSegment => {
   const boss = (index + 1) % 5 === 0
   const horizonMs = boss ? BOSS_HORIZON_MS : NORMAL_HORIZON_MS
-  const leftLane = index % 2 === 0
+  const leftLane = (index + seed) % 2 === 0
   const half = entry.playfieldWidth / 2
   const safeMinimum = leftLane ? half : 0
   const safeMaximum = leftLane ? entry.playfieldWidth : half

@@ -28,10 +28,20 @@ export const issueTicket = (
     ruleset: RULESET,
   })
   const body = encode(JSON.stringify(payload))
-  return { token: `${body}.${sign(body, secret)}`, deadlineMs: payload.submissionDeadline }
+  return {
+    token: `${body}.${sign(body, secret)}`,
+    deadlineMs: payload.submissionDeadline,
+    seed: payload.seed,
+    ruleset: payload.ruleset,
+  }
 }
 
-export const verifyTicket = (token: string, secret: string, now = Date.now()): TicketPayload => {
+export const verifyTicket = (
+  token: string,
+  secret: string,
+  now = Date.now(),
+  allowExpired = false,
+): TicketPayload => {
   const [body, signature, extra] = token.split(".")
   if (body === undefined || signature === undefined || extra !== undefined)
     throw new TicketError("invalid-ticket")
@@ -55,6 +65,6 @@ export const verifyTicket = (token: string, secret: string, now = Date.now()): T
     if (ruleset !== undefined && ruleset !== RULESET) throw new TicketError("unknown-ruleset")
     throw new TicketError("invalid-ticket")
   }
-  if (now > parsed.data.submissionDeadline) throw new TicketError("expired-ticket")
+  if (!allowExpired && now > parsed.data.submissionDeadline) throw new TicketError("expired-ticket")
   return parsed.data
 }

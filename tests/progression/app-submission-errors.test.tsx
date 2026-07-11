@@ -49,8 +49,13 @@ describe("App submission failures", () => {
   it("leaves pending and explains an expired submission", async () => {
     const requestTicket = vi
       .fn()
-      .mockResolvedValueOnce({ token: "expired", deadlineMs: 1 })
-      .mockResolvedValueOnce({ token: "fresh", deadlineMs: Date.now() + 60000 })
+      .mockResolvedValueOnce({ token: "expired", deadlineMs: 1, seed: 1, ruleset: "last-lane-v1" })
+      .mockResolvedValueOnce({
+        token: "fresh",
+        deadlineMs: Date.now() + 60000,
+        seed: 1,
+        ruleset: "last-lane-v1",
+      })
     const submit = vi.fn()
     render(
       <App
@@ -85,9 +90,12 @@ describe("App submission failures", () => {
     render(
       <App
         rankingClient={{
-          requestTicket: vi
-            .fn()
-            .mockResolvedValue({ token: "valid", deadlineMs: Date.now() + 60000 }),
+          requestTicket: vi.fn().mockResolvedValue({
+            token: "valid",
+            deadlineMs: Date.now() + 60000,
+            seed: 1,
+            ruleset: "last-lane-v1",
+          }),
           submit,
           leaderboard: vi.fn().mockResolvedValue({ entries: [] }),
         }}

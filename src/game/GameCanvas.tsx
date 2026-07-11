@@ -41,10 +41,12 @@ const reportAudioFailure = (error: unknown): void => {
 export const GameCanvas = ({
   audioFactory = createGameAudio,
   runtimeFactory = createWaveRuntime,
+  seed = 1,
   onFinish,
 }: Readonly<{
   audioFactory?: typeof createGameAudio
   runtimeFactory?: typeof createWaveRuntime
+  seed?: number
   onFinish?: (result: Readonly<{ score: ScoreBreakdown; transcript: Transcript }>) => void
 }>) => {
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -76,7 +78,7 @@ export const GameCanvas = ({
             solveWave(entry, segment, { budgetMs: 0, clock: { now: () => 0 } }),
         }
       : undefined
-    let runtime = runtimeFactory(forcedTimeout, deterministicBoss ? 4 : 0)
+    let runtime = runtimeFactory(forcedTimeout, deterministicBoss ? 4 : 0, seed)
     let frame = 0
     let clock: FrameClock = { previous: performance.now(), accumulator: 0 }
     let scoreCounters = INITIAL_RUN_SCORE
@@ -109,7 +111,7 @@ export const GameCanvas = ({
         const elapsedMs = runtime.active.elapsedBeforeMs + runtime.active.production.atMs
         onFinish?.({
           score: finalRunScore(scoreCounters, elapsedMs),
-          transcript: transcript.snapshot(),
+          transcript: transcript.snapshot(tick),
         })
       }
       if (context !== null) renderGame(context, state, metrics, reducedMotion, runtime.active)
@@ -165,7 +167,7 @@ export const GameCanvas = ({
       void audio.close().catch(reportAudioFailure)
       audioRef.current = null
     }
-  }, [audioFactory, onFinish, runtimeFactory])
+  }, [audioFactory, onFinish, runtimeFactory, seed])
 
   const togglePause = (): void => {
     if (!pausedRef.current && document.activeElement instanceof HTMLElement)

@@ -13,6 +13,8 @@ export type TicketPayload = z.infer<typeof ticketPayloadSchema>
 export const signedTicketSchema = z.object({
   token: z.string().min(1),
   deadlineMs: z.number().int().positive(),
+  seed: z.number().int().nonnegative().max(0xffff_ffff),
+  ruleset: z.literal(RULESET),
 })
 export const scoreSubmissionSchema = z.object({
   ticket: signedTicketSchema,

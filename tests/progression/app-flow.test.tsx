@@ -36,7 +36,12 @@ describe("App ranked run integration", () => {
     vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(null)
     vi.spyOn(navigator, "onLine", "get").mockReturnValue(true)
     const rankingClient = {
-      requestTicket: vi.fn().mockResolvedValue({ token: "run", deadlineMs: Date.now() + 60_000 }),
+      requestTicket: vi.fn().mockResolvedValue({
+        token: "run",
+        deadlineMs: Date.now() + 60_000,
+        seed: 1,
+        ruleset: "last-lane-v1",
+      }),
       submit: vi
         .fn()
         .mockResolvedValueOnce({ accepted: true, rank: 2 })

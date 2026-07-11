@@ -25,9 +25,10 @@ export class RankingConflictError extends Error {
 
 export class InMemoryBlobAdapter implements BlobAdapter {
   readonly #objects = new Map<string, Stored>()
+  constructor(readonly now: () => number = Date.now) {}
   async put(path: string, body: string, options: PutOptions): Promise<void> {
     if (!options.allowOverwrite && this.#objects.has(path)) throw new BlobConflictError()
-    this.#objects.set(path, { pathname: path, uploadedAt: Date.now(), body })
+    this.#objects.set(path, { pathname: path, uploadedAt: this.now(), body })
   }
   async get(path: string): Promise<Stored | undefined> {
     return this.#objects.get(path)
@@ -94,6 +95,19 @@ export const scorePath = (
 
 export class RankingStore {
   constructor(readonly adapter: BlobAdapter) {}
+  async repairExisting(run: RankedRun): Promise<boolean> {
+    const completed = await this.adapter.get(`runs/${run.nonce}.json`)
+    if (completed !== undefined) {
+      if (!same(completed, run)) throw new RankingConflictError()
+      return true
+    }
+    const pendingPath = `pending/${run.nonce}.json`
+    const pending = await this.adapter.get(pendingPath)
+    if (pending === undefined) return false
+    if (!same(pending, run)) throw new RankingConflictError()
+    await this.project(run, pendingPath)
+    return true
+  }
   async publish(run: RankedRun): Promise<void> {
     const runPath = `runs/${run.nonce}.json`
     const existing = await this.adapter.get(runPath)

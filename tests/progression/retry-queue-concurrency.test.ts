@@ -14,7 +14,11 @@ describe("retry queue concurrency", () => {
       return { accepted: true as const, rank: 1 }
     })
     const queue = createRetryQueue({ storage: localStorage, now: () => 1 })
-    queue.enqueue({ ticket: { token: "one", deadlineMs: 100 }, nickname: "한번", transcript: [] })
+    queue.enqueue({
+      ticket: { token: "one", deadlineMs: 100, seed: 1, ruleset: "last-lane-v1" },
+      nickname: "한번",
+      transcript: { entries: [], endTick: 0 },
+    })
     const first = queue.flush(submit)
     const second = queue.flush(submit)
     release?.()
@@ -29,12 +33,20 @@ describe("retry queue concurrency", () => {
       release = resolve
     })
     const queue = createRetryQueue({ storage: localStorage, now: () => 1 })
-    queue.enqueue({ ticket: { token: "old", deadlineMs: 100 }, nickname: "이전", transcript: [] })
+    queue.enqueue({
+      ticket: { token: "old", deadlineMs: 100, seed: 1, ruleset: "last-lane-v1" },
+      nickname: "이전",
+      transcript: { entries: [], endTick: 0 },
+    })
     const flushing = queue.flush(async () => {
       await blocked
       return { accepted: true, rank: 1 }
     })
-    queue.enqueue({ ticket: { token: "new", deadlineMs: 100 }, nickname: "신규", transcript: [] })
+    queue.enqueue({
+      ticket: { token: "new", deadlineMs: 100, seed: 1, ruleset: "last-lane-v1" },
+      nickname: "신규",
+      transcript: { entries: [], endTick: 0 },
+    })
     release?.()
     await flushing
     expect(queue.size()).toBe(1)
@@ -43,14 +55,14 @@ describe("retry queue concurrency", () => {
   it("persists accepted progress before a later unexpected failure", async () => {
     const queue = createRetryQueue({ storage: localStorage, now: () => 1 })
     queue.enqueue({
-      ticket: { token: "accepted", deadlineMs: 100 },
+      ticket: { token: "accepted", deadlineMs: 100, seed: 1, ruleset: "last-lane-v1" },
       nickname: "성공",
-      transcript: [],
+      transcript: { entries: [], endTick: 0 },
     })
     queue.enqueue({
-      ticket: { token: "broken", deadlineMs: 100 },
+      ticket: { token: "broken", deadlineMs: 100, seed: 1, ruleset: "last-lane-v1" },
       nickname: "오류",
-      transcript: [],
+      transcript: { entries: [], endTick: 0 },
     })
     const submit = vi
       .fn()

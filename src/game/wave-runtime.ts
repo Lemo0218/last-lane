@@ -49,11 +49,12 @@ const activate = (
   entry: EntryState,
   index: number,
   elapsedBeforeMs: number,
+  seed: number,
 ): ActiveWave => {
   const result = dependencies.solve(entry, dependencies.candidate(entry, index))
   return {
     segment: result.segment,
-    production: createProductionWaveState(entry),
+    production: createProductionWaveState(entry, seed),
     index,
     usedFallback: result.kind === "fallback",
     elapsedBeforeMs,
@@ -64,6 +65,7 @@ const runtimeFrom = (
   dependencies: WaveRuntimeDependencies,
   active: ActiveWave,
   preceding: readonly CommittedSegment[],
+  seed: number,
 ): WaveRuntime => ({
   active,
   step: (input) => {
@@ -74,7 +76,7 @@ const runtimeFrom = (
       input,
     )
     if (production.atMs < active.segment.horizonMs)
-      return runtimeFrom(dependencies, { ...active, production }, preceding)
+      return runtimeFrom(dependencies, { ...active, production }, preceding, seed)
     const committed: CommittedSegment = {
       id: active.segment.id,
       exitX: production.simulation.playerX,
@@ -90,21 +92,23 @@ const runtimeFrom = (
         nextEntry,
         active.index + 1,
         active.elapsedBeforeMs + active.segment.horizonMs,
+        seed,
       ),
       nextPreceding,
+      seed,
     )
   },
 })
 
-const DEFAULT_DEPENDENCIES: WaveRuntimeDependencies = {
-  candidate: generateWaveCandidate,
-  solve: solveWave,
-}
-
 export const createWaveRuntime = (
-  dependencies: WaveRuntimeDependencies = DEFAULT_DEPENDENCIES,
+  dependencies: WaveRuntimeDependencies | undefined = undefined,
   startIndex = 0,
+  seed = 1,
 ): WaveRuntime => {
+  const selectedDependencies: WaveRuntimeDependencies = dependencies ?? {
+    candidate: (entry, index) => generateWaveCandidate(entry, index, seed),
+    solve: solveWave,
+  }
   const entry: EntryState = {
     squad: 3,
     upgrades: { troop: 0, damage: 0, fireRate: 0, recovery: 0 },
@@ -115,5 +119,10 @@ export const createWaveRuntime = (
     blockerRadius: 12,
     precedingSegments: [],
   }
-  return runtimeFrom(dependencies, activate(dependencies, entry, startIndex, 0), [])
+  return runtimeFrom(
+    selectedDependencies,
+    activate(selectedDependencies, entry, startIndex, 0, seed),
+    [],
+    seed,
+  )
 }

@@ -5,6 +5,8 @@ import { type Transcript, transcriptSchema } from "../game/transcript"
 export const ticketSchema = z.object({
   token: z.string().min(1),
   deadlineMs: z.number().int().positive(),
+  seed: z.number().int().nonnegative().max(0xffff_ffff),
+  ruleset: z.literal("last-lane-v1"),
 })
 export type RunTicket = z.infer<typeof ticketSchema>
 export const submissionSchema = z.object({
@@ -15,7 +17,7 @@ export const submissionSchema = z.object({
 export type Submission = Readonly<{ ticket: RunTicket; nickname: string; transcript: Transcript }>
 const submissionResultSchema = z.object({
   accepted: z.literal(true),
-  rank: z.number().int().positive(),
+  rank: z.number().int().positive().nullable(),
 })
 const leaderboardSchema = z.object({
   entries: z

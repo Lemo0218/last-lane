@@ -45,14 +45,15 @@ export function App({ rankingClient, storage = localStorage, runtimeFactory }: A
   const [submissionState, setSubmissionState] = useState<SubmissionState>("idle")
   const [submissionMessage, setSubmissionMessage] = useState<string>()
   const [playingRunId, setPlayingRunId] = useState(0)
+  const [runSeed, setRunSeed] = useState(1)
   const generationRef = useRef(0)
   const submissionNonceRef = useRef(0)
   const visibleSubmissionRef = useRef<string | undefined>(undefined)
 
   const refreshRanking = useCallback(
-    async (acceptedRank?: number, visible = false): Promise<void> => {
-      if (visible && acceptedRank !== undefined) {
-        setRank(acceptedRank)
+    async (acceptedRank?: number | null, visible = false): Promise<void> => {
+      if (visible) {
+        setRank(acceptedRank ?? undefined)
         setOffline(false)
         setSubmissionState("accepted")
       }
@@ -97,6 +98,7 @@ export function App({ rankingClient, storage = localStorage, runtimeFactory }: A
     const ranked = navigator.onLine && (await session.start())
     if (generation !== generationRef.current) return
     setOffline(!ranked)
+    setRunSeed(session.ticket()?.seed ?? 1)
     setRank(undefined)
     setPlayingRunId(generation)
     setScreen("playing")
@@ -134,10 +136,11 @@ export function App({ rankingClient, storage = localStorage, runtimeFactory }: A
   }
   if (screen === "playing")
     return runtimeFactory === undefined ? (
-      <GameCanvas onFinish={(result) => finish(playingRunId, result)} />
+      <GameCanvas seed={runSeed} onFinish={(result) => finish(playingRunId, result)} />
     ) : (
       <GameCanvas
         runtimeFactory={runtimeFactory}
+        seed={runSeed}
         onFinish={(result) => finish(playingRunId, result)}
       />
     )

@@ -3,7 +3,7 @@ import { type RankedRun, scoreSubmissionSchema } from "../src/api/contracts"
 import { RankingConflictError, RankingStore, VercelBlobAdapter } from "../src/server/blob-store"
 import { normalizeNickname } from "../src/server/nicknames"
 import { LayeredRateLimiter } from "../src/server/rate-limit"
-import { verifyTicket } from "../src/server/ticket"
+import { TicketError, verifyTicket } from "../src/server/ticket"
 import { verifyReplay } from "../src/server/verifier"
 
 const limiter = new LayeredRateLimiter("score-submission", { burst: 3, sustained: 12 })
@@ -23,9 +23,10 @@ export default async function handler(request: Request): Promise<Response> {
     if (Buffer.byteLength(JSON.stringify(raw)) > 128 * 1024)
       return json({ error: "payload too large" }, 413)
     const submission = scoreSubmissionSchema.parse(raw)
-    const ticket = verifyTicket(submission.ticket.token, secret)
+    const now = Date.now()
+    const ticket = verifyTicket(submission.ticket.token, secret, now, true)
     const result = verifyReplay(ticket.seed, submission.transcript)
-    const minute = Math.floor(Date.now() / 60_000) * 60_000
+    const minute = Math.floor(ticket.issuedAt / 60_000) * 60_000
     const run: RankedRun = {
       nonce: ticket.nonce,
       ticketDigest: createHash("sha256").update(submission.ticket.token).digest("hex"),
@@ -35,11 +36,18 @@ export default async function handler(request: Request): Promise<Response> {
       submittedAt: new Date(minute).toISOString(),
     }
     const store = new RankingStore(new VercelBlobAdapter())
-    await store.publish(run)
+    const repaired = await store.repairExisting(run)
+    if (!repaired) {
+      if (now > ticket.submissionDeadline) throw new TicketError("expired-ticket")
+      await store.publish(run)
+    }
     const board = await store.leaderboard()
     return json({
       accepted: true,
-      rank: Math.max(1, board.findIndex((entry) => entry.nonce === run.nonce) + 1),
+      rank: (() => {
+        const index = board.findIndex((entry) => entry.nonce === run.nonce)
+        return index < 0 ? null : index + 1
+      })(),
     })
   } catch (error) {
     if (error instanceof RankingConflictError) return json({ error: error.message }, 409)

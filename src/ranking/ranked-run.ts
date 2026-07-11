@@ -2,12 +2,12 @@ import type { Transcript } from "../game/transcript"
 import type { RunTicket, Submission } from "./client"
 
 type RankedOutcome =
-  | Readonly<{ kind: "ranked"; rank: number }>
+  | Readonly<{ kind: "ranked"; rank: number | null }>
   | Readonly<{ kind: "queued"; token: string }>
   | Readonly<{ kind: "unranked" }>
 type Dependencies = Readonly<{
   requestTicket: () => Promise<RunTicket>
-  submit: (submission: Submission) => Promise<Readonly<{ accepted: true; rank: number }>>
+  submit: (submission: Submission) => Promise<Readonly<{ accepted: true; rank: number | null }>>
   enqueue: (submission: Submission) => void
   now?: () => number
 }>
@@ -21,6 +21,7 @@ export const createRankedRun = ({
   let ticket: RunTicket | undefined
   let generation = 0
   return {
+    ticket: (): RunTicket | undefined => ticket,
     start: async (): Promise<boolean> => {
       const currentGeneration = generation + 1
       generation = currentGeneration

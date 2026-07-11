@@ -1,10 +1,7 @@
-import { STEP_MS } from "../game/config"
-import { scoreRun } from "../game/scoring"
-import { createSimulation, stepSimulation } from "../game/simulation"
+import { accumulateRunScore, finalRunScore, INITIAL_RUN_SCORE } from "../game/run-score"
 import { type Transcript, transcriptSchema } from "../game/transcript"
-import { score } from "../game/types"
+import { createWaveRuntime } from "../game/wave-runtime"
 
-const MAX_TICKS = 60_000
 export class VerificationError extends Error {
   constructor(readonly code: "invalid-transcript" | "verification-timeout") {
     super(code.replaceAll("-", " "))
@@ -15,49 +12,46 @@ export class VerificationError extends Error {
 export const verifyReplay = (seed: number, input: Transcript, budgetMs = 1_500) => {
   const parsed = transcriptSchema.safeParse(input)
   if (!parsed.success) throw new VerificationError("invalid-transcript")
-  let lastTick = 0
-  for (const entry of parsed.data) {
-    if (entry.tick <= lastTick || entry.tick > MAX_TICKS)
+  let priorTick = -1
+  let priorMove: "L" | "N" | "R" | undefined
+  for (const entry of parsed.data.entries) {
+    if (entry.tick <= priorTick || entry.tick >= parsed.data.endTick || entry.move === priorMove)
       throw new VerificationError("invalid-transcript")
-    lastTick = entry.tick
+    priorTick = entry.tick
+    priorMove = entry.move
   }
+  if (parsed.data.endTick > 0 && parsed.data.entries[0]?.tick !== 0)
+    throw new VerificationError("invalid-transcript")
   const started = performance.now()
-  let state = createSimulation(seed, { troop: 0, damage: 0, fireRate: 0, recovery: 0 })
+  let runtime = createWaveRuntime(undefined, 0, seed)
+  let counters = INITIAL_RUN_SCORE
   let movement: -1 | 0 | 1 = 0
   let index = 0
-  let basicKills = 0,
-    eliteKills = 0,
-    bosses = 0,
-    closeCalls = 0
-  for (let current = 1; current <= lastTick && state.status === "running"; current += 1) {
-    const next = parsed.data[index]
+  for (let current = 0; current < parsed.data.endTick; current += 1) {
+    const next = parsed.data.entries[index]
     if (next?.tick === current) {
       movement = next.move === "L" ? -1 : next.move === "R" ? 1 : 0
       index += 1
     }
-    state = stepSimulation(state, { moveX: movement, paused: false })
-    for (const event of state.events) {
-      if (event.kind === "zombie-killed") {
-        if (event.zombieKind === "basic") basicKills += 1
-        else if (event.zombieKind === "elite") eliteKills += 1
-        else bosses += 1
-      }
-      if (event.kind === "close-call") closeCalls += 1
-    }
-    if (current % 256 === 0 && performance.now() - started > budgetMs)
+    const before = Number(runtime.active.production.simulation.distance)
+    runtime = runtime.step({ moveX: movement, paused: false })
+    const state = runtime.active.production.simulation
+    counters = accumulateRunScore(
+      counters,
+      Math.max(0, Number(state.distance) - before),
+      state.events,
+    )
+    if (current % 128 === 0 && performance.now() - started > budgetMs)
       throw new VerificationError("verification-timeout")
   }
-  const breakdown = scoreRun({
-    distance: state.distance,
-    basicKills: score(basicKills),
-    eliteKills: score(eliteKills),
-    bosses: score(bosses),
-    closeCalls: score(closeCalls),
-    survivedMs: state.elapsedMs,
-  })
+  const elapsedMs = runtime.active.elapsedBeforeMs + runtime.active.production.atMs
+  const breakdown = finalRunScore(counters, elapsedMs)
+  const state = runtime.active.production.simulation
   return {
     score: Number(breakdown.total),
-    survivalTicks: Math.floor(Number(state.elapsedMs) / STEP_MS),
+    survivalTicks: parsed.data.endTick,
     breakdown,
+    finalState: { playerX: state.playerX, squad: state.squad, wave: runtime.active.index },
+    events: state.events,
   }
 }

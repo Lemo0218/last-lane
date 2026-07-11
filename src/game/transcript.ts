@@ -4,7 +4,10 @@ export const transcriptEntrySchema = z.object({
   tick: z.number().int().nonnegative().max(60_000),
   move: z.enum(["L", "N", "R"]),
 })
-export const transcriptSchema = z.array(transcriptEntrySchema).max(2_400)
+export const transcriptSchema = z.object({
+  entries: z.array(transcriptEntrySchema).max(2_400),
+  endTick: z.number().int().nonnegative().max(60_000),
+})
 export type TranscriptEntry = z.infer<typeof transcriptEntrySchema>
 export type Transcript = z.infer<typeof transcriptSchema>
 
@@ -20,10 +23,10 @@ export const createTranscriptRecorder = () => {
   return {
     record: (tick: number, movement: -1 | 0 | 1): void => {
       const move = movementCode(movement)
-      if (move === previous) return
+      if (entries.length > 0 && move === previous) return
       entries.push(transcriptEntrySchema.parse({ tick, move }))
       previous = move
     },
-    snapshot: (): Transcript => transcriptSchema.parse(entries),
+    snapshot: (endTick: number): Transcript => transcriptSchema.parse({ entries, endTick }),
   }
 }
