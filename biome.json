@@ -12,6 +12,7 @@
       "**",
       "!!node_modules",
       "!!.worktrees",
+      "!!.vercel",
       "!!dist",
       "!!dev-dist",
       "!!coverage",
