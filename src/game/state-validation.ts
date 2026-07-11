@@ -28,6 +28,8 @@ export const validateSimulationState = (state: SimulationState): SimulationState
   for (const [field, value] of fields) requireNatural(field, value)
   if (!Number.isSafeInteger(state.playerVelocity))
     throw new RangeError("player velocity must be a safe integer")
+  if (!Number.isFinite(state.playerMotionRemainder) || Math.abs(state.playerMotionRemainder) >= 1)
+    throw new RangeError("player motion remainder must be a finite subunit")
   for (const zombie of state.zombies) {
     requireNatural("zombie id", zombie.id)
     requireNatural("zombie position", zombie.x)

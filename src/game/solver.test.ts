@@ -95,8 +95,24 @@ describe("wave solver", () => {
       gates: [],
     }
     const clock = { now: () => 0 }
-    expect(solveWave(entry({ x: 60, velocity: 10 }), segment, { clock }).kind).toBe("accepted")
-    expect(solveWave(entry({ x: 60, velocity: -10 }), segment, { clock }).kind).toBe("fallback")
+    expect(solveWave(entry({ x: 60, velocity: 500 }), segment, { clock }).kind).toBe("accepted")
+    expect(solveWave(entry({ x: 60, velocity: -500 }), segment, { clock }).kind).toBe("fallback")
+  })
+
+  it("honors gate radii and preserves same-kind same-tick IDs", () => {
+    const state = entry({ x: 50 })
+    const segment: WaveSegment = {
+      id: "gate-radius",
+      horizonMs: 6_000,
+      blockers: [],
+      gates: [
+        { id: "wide-a", atMs: 10, x: 70, radius: 25, kind: "recovery", level: 1 },
+        { id: "wide-b", atMs: 10, x: 75, radius: 30, kind: "recovery", level: 1 },
+        { id: "narrow", atMs: 10, x: 70, radius: 1, kind: "recovery", level: 1 },
+      ],
+    }
+    const result = solveWave(state, segment, { clock: { now: () => 0 } })
+    expect(result.witness.collectedGateIds).toEqual(["wide-a", "wide-b"])
   })
 
   it("chooses survival over a reward before a boss", () => {

@@ -89,7 +89,7 @@ it("composes recovery choice, entrance, and boss with one surviving offered choi
       fc.integer({ min: 45, max: 60 }),
       fc.integer({ min: -2, max: 2 }),
       fc.integer({ min: 1, max: 4 }),
-      fc.integer({ min: 60, max: 70 }),
+      fc.integer({ min: 75, max: 85 }),
       (squad, x, velocity, rewardLevel, bossReach) => {
         const state: EntryState = {
           squad,

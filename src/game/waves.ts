@@ -96,8 +96,8 @@ export const hasEscapeCorridor = (entry: EntryState, segment: WaveSegment): bool
     const next: [number, number][] = []
     for (const [minimum, maximum] of reachable) {
       for (const [freeMinimum, freeMaximum] of freeIntervals(entry, segment, atMs)) {
-        const low = Math.max(freeMinimum, minimum - 8)
-        const high = Math.min(freeMaximum, maximum + 8)
+        const low = Math.max(freeMinimum, minimum - 5)
+        const high = Math.min(freeMaximum, maximum + 5)
         if (low <= high) next.push([low, high])
       }
     }

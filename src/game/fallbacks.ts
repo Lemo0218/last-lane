@@ -48,9 +48,13 @@ const neutralWitness = (entry: EntryState): WaveWitness => {
   const frames: WitnessFrame[] = []
   let x = entry.x
   let currentVelocity = entry.velocity
+  let remainder = 0
   for (let atMs = SOLVER_STEP_MS; atMs <= NORMAL_HORIZON_MS; atMs += SOLVER_STEP_MS) {
     for (let tickIndex = 0; tickIndex < SOLVER_STEP_MS / 10; tickIndex += 1) {
-      x = Math.max(0, Math.min(entry.playfieldWidth, x + currentVelocity))
+      const motion = remainder + currentVelocity / 100
+      const delta = Math.trunc(motion)
+      remainder = motion - delta
+      x = Math.max(0, Math.min(entry.playfieldWidth, x + delta))
       if (x === 0 || x === entry.playfieldWidth) currentVelocity = 0
     }
     frames.push({ atMs, move: 0, x, velocity: currentVelocity, squad: entry.squad })
@@ -71,7 +75,7 @@ export const fallbackPatterns: readonly FallbackPattern[] = [
     bounds: {
       squad: [1, Number.MAX_SAFE_INTEGER],
       x: [0, "playfieldWidth"],
-      velocity: [-40, 40],
+      velocity: [-500, 500],
       playfieldWidth: [1, 1_000],
       collisionRadii: [0, 500],
       precedingSegments: [0, 2],
@@ -117,8 +121,8 @@ export const fallbackPatterns: readonly FallbackPattern[] = [
       ].every(Number.isFinite) &&
       entry.squad >= 1 &&
       entry.squad <= Number.MAX_SAFE_INTEGER &&
-      entry.velocity >= -40 &&
-      entry.velocity <= 40 &&
+      entry.velocity >= -500 &&
+      entry.velocity <= 500 &&
       entry.playerRadius >= 0 &&
       entry.playerRadius <= 500 &&
       entry.blockerRadius >= 0 &&

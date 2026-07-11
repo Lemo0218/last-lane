@@ -1,4 +1,5 @@
 import { STEP_MS } from "./config"
+import { collectGates } from "./gates"
 import { createSimulation, stepSimulation } from "./simulation"
 import type { Gate, SimulationInput, SimulationState } from "./types"
 import { position, tick, velocity } from "./types"
@@ -22,17 +23,6 @@ export const createProductionWaveState = (entry: EntryState): ProductionWaveStat
   collectedGateIds: new Set(),
 })
 
-const activeGates = (
-  segment: WaveSegment,
-  collected: ReadonlySet<string>,
-  atMs: number,
-): readonly Gate[] =>
-  segment.gates.flatMap((gate, index) =>
-    !collected.has(gate.id) && gate.atMs <= atMs && atMs < gate.atMs + STEP_MS
-      ? [{ id: index + 1, kind: gate.kind, x: position(gate.x), level: gate.level }]
-      : [],
-  )
-
 export const stepProductionWave = (
   entry: EntryState,
   segment: WaveSegment,
@@ -41,10 +31,23 @@ export const stepProductionWave = (
 ): ProductionWaveState => {
   const atMs = state.atMs + STEP_MS
   const beforeX = state.simulation.playerX
-  const gates = activeGates(segment, state.collectedGateIds, atMs)
-  const stepped = stepSimulation({ ...state.simulation, gates }, input, tick(STEP_MS))
+  const stepped = stepSimulation({ ...state.simulation, gates: [] }, input, tick(STEP_MS))
   const playerX = position(Math.max(0, Math.min(entry.playfieldWidth, stepped.playerX)))
-  let squad = stepped.squad
+  const collidedWaveGates = segment.gates.filter(
+    (gate) =>
+      !state.collectedGateIds.has(gate.id) &&
+      gate.atMs <= atMs &&
+      atMs < gate.atMs + STEP_MS &&
+      Math.abs(gate.x - playerX) <= gate.radius + entry.playerRadius,
+  )
+  const productionGates: readonly Gate[] = collidedWaveGates.map((gate, index) => ({
+    id: index + 1,
+    kind: gate.kind,
+    x: playerX,
+    level: gate.level,
+  }))
+  const gateResult = collectGates({ ...stepped, gates: productionGates }, playerX)
+  let squad = gateResult.squad
   for (const blocker of segment.blockers) {
     const radius = entry.playerRadius + entry.blockerRadius
     if (
@@ -56,23 +59,21 @@ export const stepProductionWave = (
       squad = Math.max(0, squad - blocker.damage)
   }
   const collected = new Set(state.collectedGateIds)
-  for (const event of stepped.events) {
-    if (event.kind !== "gate-collected") continue
-    const gate = segment.gates.find(
-      (candidate) =>
-        candidate.atMs <= atMs &&
-        atMs < candidate.atMs + STEP_MS &&
-        candidate.kind === event.gateKind,
-    )
-    if (gate !== undefined) collected.add(gate.id)
-  }
+  for (const gate of collidedWaveGates) collected.add(gate.id)
   return {
     simulation: {
       ...stepped,
       playerX,
       playerVelocity:
         playerX === 0 || playerX === entry.playfieldWidth ? velocity(0) : stepped.playerVelocity,
+      playerMotionRemainder:
+        playerX === 0 || playerX === entry.playfieldWidth ? 0 : stepped.playerMotionRemainder,
       squad,
+      maximumSquad: gateResult.maximumSquad,
+      shotDamage: gateResult.shotDamage,
+      fireIntervalMs: gateResult.fireIntervalMs,
+      recoveryEveryMs: gateResult.recoveryEveryMs,
+      recoveryAmount: gateResult.recoveryAmount,
       gates: [],
     },
     atMs,

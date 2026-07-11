@@ -65,6 +65,7 @@ export type SimulationState = Readonly<{
   distance: Position
   playerX: Position
   playerVelocity: Velocity
+  playerMotionRemainder: number
   squad: number
   maximumSquad: number
   shotDamage: number

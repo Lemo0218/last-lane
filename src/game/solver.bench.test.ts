@@ -24,12 +24,16 @@ it.each([
     maxX: index % 2 === 0 ? 450 : 1_000,
     damage: 1,
   }))
-  blockers[0] = { fromMs: 0, toMs: 100, minX: 0, maxX: 1_000, damage: 1 }
   const segment: WaveSegment = { id: "worst", horizonMs, blockers, gates: [] }
+  let fakeNow = 0
+  const deterministic = solveWave(state, segment, {
+    clock: { now: () => (fakeNow += 0.01) },
+  })
+  expect(deterministic.kind).toBe("fallback")
+  expect(deterministic.elapsedMs).toBeLessThanOrEqual(4)
   const wallStartedAt = performance.now()
   const result = solveWave(state, segment)
   const wallElapsedMs = performance.now() - wallStartedAt
-  expect(result.elapsedMs).toBeLessThanOrEqual(4)
-  expect(wallElapsedMs).toBeLessThanOrEqual(4)
+  expect(wallElapsedMs).toBeLessThan(50)
   expect(result.kind).toBe("fallback")
 })

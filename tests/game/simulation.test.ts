@@ -10,6 +10,18 @@ const step = (state: SimulationState, moveX: -1 | 0 | 1 = 0) =>
   stepSimulation(state, { moveX, paused: false })
 
 describe("combat simulation", () => {
+  it("Given equal elapsed time When entities move Then legacy per-second speeds are preserved", () => {
+    let state = createSimulation(1, noUpgrades, {
+      playerX: 100,
+      projectiles: [{ id: 1, x: 100, damage: 1 }],
+      zombies: [{ id: 2, kind: "basic", x: 900, hp: 100, damage: 1 }],
+      spawnCooldownMs: 100_000,
+    })
+    for (let elapsed = 0; elapsed < 160; elapsed += STEP_MS) state = step(state, 1)
+    expect(state.playerX).toBe(180)
+    expect(state.projectiles[0]?.x).toBe(500)
+    expect(state.zombies[0]?.x).toBe(860)
+  })
   it("Given movement input When fixed step runs Then player remains in bounds", () => {
     let state = createSimulation(1, noUpgrades, { spawnCooldownMs: 100_000 })
     for (let index = 0; index < 500; index += 1) state = step(state, 1)
@@ -58,7 +70,7 @@ describe("combat simulation", () => {
     const state = createSimulation(1, noUpgrades, {
       combo: 2,
       comboExpiresMs: 1000,
-      zombies: [{ id: 1, kind: "basic", x: 40, hp: 10, damage: 1 }],
+      zombies: [{ id: 1, kind: "basic", x: 24, hp: 10, damage: 1 }],
       projectiles: [{ id: 2, x: 0, damage: 10 }],
       fireCooldownMs: 1000,
     })

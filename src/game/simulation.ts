@@ -17,7 +17,7 @@ import type {
 import { position, tick, velocity } from "./types"
 import { requireNatural, requireUint32 } from "./validation"
 
-const PROJECTILE_SPEED_PER_STEP = 40
+const PROJECTILE_SPEED_PER_STEP = 25
 const COLLISION_DISTANCE = 12
 
 export const createSimulation = (
@@ -37,6 +37,7 @@ export const createSimulation = (
     distance: position(0),
     playerX: position(0),
     playerVelocity: velocity(0),
+    playerMotionRemainder: 0,
     squad: maximumSquad,
     maximumSquad,
     shotDamage: 10 + upgrades.damage * 5,
@@ -140,8 +141,11 @@ export const stepSimulation = (
     throw new RangeError("moveX must be -1, 0, or 1")
   }
   const elapsedMs = state.elapsedMs + deltaMs
-  const playerVelocity = Math.max(-40, Math.min(40, state.playerVelocity + input.moveX))
-  const playerX = Math.min(WORLD_MAX_X, Math.max(WORLD_MIN_X, state.playerX + playerVelocity))
+  const playerVelocity = input.moveX === 0 ? state.playerVelocity : input.moveX * 500
+  const playerMotion = state.playerMotionRemainder + (playerVelocity * STEP_MS) / 1_000
+  const playerDelta = Math.trunc(playerMotion)
+  const playerMotionRemainder = playerMotion - playerDelta
+  const playerX = Math.min(WORLD_MAX_X, Math.max(WORLD_MIN_X, state.playerX + playerDelta))
   const gates = collectGates(state, playerX)
   const events: SimulationEvent[] = [...gates.events]
   let nextId = state.nextEntityId
@@ -160,9 +164,10 @@ export const stepSimulation = (
     nextId += 1
     fireCooldownMs = gates.fireIntervalMs
   }
+  const zombieDelta = Math.floor(elapsedMs / 4) - Math.floor(Number(state.elapsedMs) / 4)
   const movedZombies: Zombie[] = state.zombies.map((zombie) => ({
     ...zombie,
-    x: position(Math.max(WORLD_MIN_X, zombie.x - 4)),
+    x: position(Math.max(WORLD_MIN_X, zombie.x - zombieDelta)),
   }))
   const collisions = resolveProjectileCollisions(
     movedZombies,
@@ -217,11 +222,13 @@ export const stepSimulation = (
     ...state,
     seed: nextRandom(state.seed).seed,
     elapsedMs: tick(elapsedMs),
-    distance: position(state.distance + Math.abs(playerVelocity)),
+    distance: position(state.distance + Math.abs(playerDelta)),
     playerX: position(playerX),
     playerVelocity: velocity(
       playerX === WORLD_MIN_X || playerX === WORLD_MAX_X ? 0 : playerVelocity,
     ),
+    playerMotionRemainder:
+      playerX === WORLD_MIN_X || playerX === WORLD_MAX_X ? 0 : playerMotionRemainder,
     squad,
     maximumSquad: gates.maximumSquad,
     shotDamage: gates.shotDamage,
