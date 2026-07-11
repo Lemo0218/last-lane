@@ -15,7 +15,7 @@ import { Tutorial } from "./ui/Tutorial"
 
 type Screen = "start" | "playing" | "result" | "leaderboard"
 type CompletedRun = Readonly<{ id: number; score: ResultScore; transcript: Transcript }>
-type SubmissionState = "idle" | "pending" | "accepted" | "queued" | "failed"
+type SubmissionState = "idle" | "pending" | "accepted" | "queued" | "failed" | "expired"
 
 type AppProps = Readonly<{
   rankingClient?: ReturnType<typeof createRankingClient>
@@ -177,8 +177,8 @@ export function App({ rankingClient, storage = localStorage, runtimeFactory }: A
                 setSubmissionState("queued")
               }
               if (outcome.kind === "unranked") {
-                setSubmissionState("failed")
-                setSubmissionMessage("등록 시간이 만료되었습니다. 다시 시도해 주세요.")
+                setSubmissionState("expired")
+                setSubmissionMessage("랭킹 등록 시간이 만료되었습니다. 새 게임을 시작해 주세요")
               }
             })
             .catch((error: unknown) => {

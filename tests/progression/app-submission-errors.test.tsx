@@ -47,11 +47,16 @@ describe("App submission failures", () => {
   }
 
   it("leaves pending and explains an expired submission", async () => {
+    const requestTicket = vi
+      .fn()
+      .mockResolvedValueOnce({ token: "expired", deadlineMs: 1 })
+      .mockResolvedValueOnce({ token: "fresh", deadlineMs: Date.now() + 60000 })
+    const submit = vi.fn()
     render(
       <App
         rankingClient={{
-          requestTicket: vi.fn().mockResolvedValue({ token: "expired", deadlineMs: 1 }),
-          submit: vi.fn(),
+          requestTicket,
+          submit,
           leaderboard: vi.fn(),
         }}
         runtimeFactory={() => createWaveRuntime(dependencies)}
@@ -60,10 +65,16 @@ describe("App submission failures", () => {
     await finishRun()
     await waitFor(() =>
       expect(
-        screen.getByText("등록 시간이 만료되었습니다. 다시 시도해 주세요."),
+        screen.getByText("랭킹 등록 시간이 만료되었습니다. 새 게임을 시작해 주세요"),
       ).toBeInTheDocument(),
     )
-    expect(screen.getByRole("button", { name: "랭킹 등록" })).toBeEnabled()
+    const expiredButton = screen.getByRole("button", { name: "등록 만료" })
+    expect(expiredButton).toBeDisabled()
+    fireEvent.click(expiredButton)
+    expect(submit).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole("button", { name: "새 게임 시작" }))
+    await waitFor(() => expect(requestTicket).toHaveBeenCalledTimes(2))
+    expect(screen.getByLabelText("라스트 레인 게임 화면")).toBeInTheDocument()
   })
 
   it("catches an unexpected submit rejection and allows retry", async () => {

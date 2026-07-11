@@ -14,7 +14,7 @@ type Props = Readonly<{
   personalBest: number
   rank?: number | undefined
   offline?: boolean
-  submissionState?: "idle" | "pending" | "accepted" | "queued" | "failed"
+  submissionState?: "idle" | "pending" | "accepted" | "queued" | "failed" | "expired"
   submissionMessage?: string | undefined
   onReplay: () => void
   onSubmit?: (nickname: string) => void
@@ -42,7 +42,9 @@ export const ResultScreen = ({
         ? "등록 완료"
         : submissionState === "queued"
           ? "전송 대기 중"
-          : "랭킹 등록"
+          : submissionState === "expired"
+            ? "등록 만료"
+            : "랭킹 등록"
   useEffect(() => replayRef.current?.focus(), [])
   return (
     <main className="panel-screen">
@@ -102,8 +104,13 @@ export const ResultScreen = ({
         >
           {submitLabel}
         </button>
-        <button ref={replayRef} className="secondary-action" type="button" onClick={onReplay}>
-          다시 달리기
+        <button
+          ref={replayRef}
+          className={submissionState === "expired" ? "primary-action" : "secondary-action"}
+          type="button"
+          onClick={onReplay}
+        >
+          {submissionState === "expired" ? "새 게임 시작" : "다시 달리기"}
         </button>
         <button className="text-action" type="button" onClick={onLeaderboard}>
           리더보드 보기

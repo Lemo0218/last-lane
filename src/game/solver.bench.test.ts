@@ -36,16 +36,3 @@ it.each([
   expect(deterministic.kind).toBe("fallback")
   expect(deterministic.elapsedMs).toBeLessThanOrEqual(4)
 })
-
-it.skip.each([
-  6_000, 12_000,
-] as const)("diagnoses p95 wall time for the %ims worst case", (horizonMs) => {
-  const segment = worstSegment(horizonMs)
-  for (let warmup = 0; warmup < 5; warmup += 1) solveWave(state, segment)
-  const samples = Array.from({ length: 25 }, () => {
-    const startedAt = performance.now()
-    solveWave(state, segment)
-    return performance.now() - startedAt
-  }).sort((left, right) => left - right)
-  expect(samples[23]).toBeLessThanOrEqual(4)
-})
