@@ -5,6 +5,7 @@ import { RankingConflictError, RankingStore, VercelBlobAdapter } from "../src/se
 import { DistributedRateLimiter } from "../src/server/distributed-rate-limit"
 import { NicknameError, normalizeNickname } from "../src/server/nicknames"
 import { LayeredRateLimiter } from "../src/server/rate-limit"
+import { rankingSecrets } from "../src/server/secrets"
 import { TicketError, verifyTicket } from "../src/server/ticket"
 import { VerificationError, verifyReplay } from "../src/server/verifier"
 
@@ -84,15 +85,15 @@ export const submitScore = async (
 }
 
 export default async function handler(request: Request): Promise<Response> {
-  const secret = process.env["TICKET_HMAC_SECRET"]
-  if (secret === undefined || process.env["BLOB_READ_WRITE_TOKEN"] === undefined)
+  const secrets = rankingSecrets(process.env)
+  if (secrets === undefined || process.env["BLOB_READ_WRITE_TOKEN"] === undefined)
     return json({ error: "ranking unavailable" }, 503)
   return submitScore(request, {
-    secret,
+    secret: secrets.ticket,
     store: new RankingStore(new VercelBlobAdapter()),
     now: Date.now,
     limiter,
-    distributedLimiter: new DistributedRateLimiter(new VercelBlobAdapter(), secret, {
+    distributedLimiter: new DistributedRateLimiter(new VercelBlobAdapter(), secrets.ipHash, {
       kind: "submit",
       windowMs: 60_000,
       slots: 12,
