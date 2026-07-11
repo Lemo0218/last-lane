@@ -4,6 +4,7 @@ import { PauseMenu } from "../ui/PauseMenu"
 import { createGameAudio } from "./audio"
 import { captureE2EGolden } from "./e2e-golden"
 import { advanceFrame, type FrameClock } from "./frame-clock"
+import { createFramePerformance } from "./frame-performance"
 import { GAME_E2E_ENABLED, INITIAL_GAME_TELEMETRY, reportAudioFailure } from "./game-canvas-support"
 import { createInputController } from "./input"
 import { renderGame, resizeCanvas } from "./renderer"
@@ -27,6 +28,7 @@ export const GameCanvas = ({
   onFinish?: (result: Readonly<{ score: ScoreBreakdown; transcript: Transcript }>) => void
 }>) => {
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const shellRef = useRef<HTMLElement>(null)
   const joystickRef = useRef<HTMLDivElement>(null)
   const audioRef = useRef<ReturnType<typeof createGameAudio> | null>(null)
   const pausedRef = useRef(false)
@@ -61,6 +63,8 @@ export const GameCanvas = ({
     let scoreCounters = INITIAL_RUN_SCORE
     let tick = 0
     let finished = false
+    let frameSamples = 0
+    const performanceMetrics = createFramePerformance()
     const transcript = createTranscriptRecorder()
     let visible = !document.hidden
     let metrics = resizeCanvas(canvas)
@@ -69,6 +73,7 @@ export const GameCanvas = ({
     }
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches
     const draw = (now: number): void => {
+      const workStarted = performance.now()
       const advanced = advanceFrame(clock, now, visible && !pausedRef.current)
       clock = advanced.clock
       for (let step = 0; step < advanced.steps; step += 1) {
@@ -103,6 +108,25 @@ export const GameCanvas = ({
         })
       }
       if (context !== null) renderGame(context, state, metrics, reducedMotion, runtime.active)
+      const visibleEffects = state.events.some((event) => event.kind === "squad-damaged")
+        ? reducedMotion
+          ? 2
+          : 6
+        : 0
+      performanceMetrics.record(
+        performance.now() - workStarted,
+        state.zombies.length + state.projectiles.length + state.gates.length,
+        visibleEffects,
+      )
+      frameSamples += 1
+      const shell = shellRef.current
+      if (GAME_E2E_ENABLED && shell !== null) {
+        const snapshot = performanceMetrics.snapshot()
+        shell.setAttribute("data-frame-samples", String(frameSamples))
+        shell.setAttribute("data-frame-p95-ms", snapshot.p95WorkMs.toFixed(3))
+        shell.setAttribute("data-max-entities", String(snapshot.maxEntities))
+        shell.setAttribute("data-max-effects", String(snapshot.maxEffects))
+      }
       if (advanced.steps > 0) {
         const elapsedMs = runtime.active.elapsedBeforeMs + runtime.active.production.atMs
         const currentScore = finalRunScore(scoreCounters, elapsedMs)
@@ -170,6 +194,7 @@ export const GameCanvas = ({
 
   return (
     <main
+      ref={shellRef}
       className="game-shell"
       data-player-x={GAME_E2E_ENABLED ? telemetry.playerX : undefined}
       data-wave={GAME_E2E_ENABLED ? telemetry.wave : undefined}

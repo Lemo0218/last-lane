@@ -4,6 +4,7 @@ export const RANKED_RUN_LIMIT_MS = 600_000 as const
 export const DIFFICULTY_TIER_MS = 30_000 as const
 export const BOSS_EVERY_TIERS = 2 as const
 export const MAX_ENTITIES = 128 as const
+export const MAX_VISIBLE_EFFECTS = 32 as const
 export const WORLD_MIN_X = 0 as const
 export const WORLD_MAX_X = 1000 as const
 
