@@ -83,6 +83,6 @@ export const withPublicationLease = async <T>(
       if (!(error instanceof BlobConflictError)) throw error
     }
   }
-  if (!outcome.ok) throw outcome.error
+  if ("error" in outcome) throw outcome.error
   return outcome.value
 }
