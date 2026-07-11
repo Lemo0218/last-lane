@@ -15,7 +15,7 @@ import type {
   ZombieKind,
 } from "./types"
 import { position, tick } from "./types"
-import { requireNatural } from "./validation"
+import { requireNatural, requireUint32 } from "./validation"
 
 const PLAYER_SPEED_PER_STEP = 8
 const PROJECTILE_SPEED_PER_STEP = 40
@@ -26,7 +26,7 @@ export const createSimulation = (
   upgrades: UpgradeLevels,
   overrides: SimulationOverrides = {},
 ): SimulationState => {
-  requireNatural("seed", seed)
+  requireUint32("seed", seed)
   requireNatural("troop upgrade", upgrades.troop)
   requireNatural("damage upgrade", upgrades.damage)
   requireNatural("fire rate upgrade", upgrades.fireRate)

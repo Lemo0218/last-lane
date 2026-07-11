@@ -1,4 +1,5 @@
 import type { Gate, SimulationEvent, SimulationState } from "./types"
+import { requireNatural, requireSafeProduct, requireSafeSum } from "./validation"
 
 const COLLISION_DISTANCE = 12
 
@@ -24,19 +25,26 @@ export const collectGates = (state: SimulationState, playerX: number): GateResul
   let recoveryAmount = state.recoveryAmount
   const events: SimulationEvent[] = []
   for (const gate of collected) {
+    requireNatural("gate level", gate.level)
     switch (gate.kind) {
       case "troop":
-        maximumSquad += gate.level
-        squad += gate.level
+        maximumSquad = requireSafeSum("maximum squad", [maximumSquad, gate.level])
+        squad = requireSafeSum("squad", [squad, gate.level])
         break
       case "damage":
-        shotDamage += gate.level * 5
+        shotDamage = requireSafeSum("shot damage", [
+          shotDamage,
+          requireSafeProduct("damage gate", gate.level, 5),
+        ])
         break
       case "fire-rate":
-        fireIntervalMs = Math.max(200, fireIntervalMs - gate.level * 200)
+        fireIntervalMs = Math.max(
+          200,
+          fireIntervalMs - requireSafeProduct("fire-rate gate", gate.level, 200),
+        )
         break
       case "recovery":
-        recoveryAmount += gate.level
+        recoveryAmount = requireSafeSum("recovery amount", [recoveryAmount, gate.level])
         recoveryEveryMs = 10_000
         break
       default:

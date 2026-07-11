@@ -15,6 +15,12 @@ export const requireNatural = (field: string, value: number): number => {
   return value
 }
 
+export const requireUint32 = (field: string, value: number): number => {
+  requireNatural(field, value)
+  if (value > 0xffff_ffff) throw new InvalidGameValueError(field, value)
+  return value
+}
+
 export const requireSafeProduct = (field: string, left: number, right: number): number => {
   const product = left * right
   return requireNatural(field, product)

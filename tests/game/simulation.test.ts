@@ -193,6 +193,35 @@ describe("combat simulation", () => {
     expect(result.events.some((event) => event.kind === "boss-spawned")).toBe(true)
   })
 
+  it.each([
+    2, 4, 6,
+  ])("Given due boss tier %s When crossed Then cadence emits exactly one boss", (tier) => {
+    const state = createSimulation(1, noUpgrades, {
+      elapsedMs: tier * 30_000 - STEP_MS,
+      spawnCooldownMs: 1000,
+    })
+
+    const result = step(state)
+
+    expect(result.zombies.filter((zombie) => zombie.kind === "boss")).toHaveLength(1)
+    expect(result.events.filter((event) => event.kind === "boss-spawned")).toHaveLength(1)
+  })
+
+  it("Given equal states and input transcript When simulated Then full states remain deterministic", () => {
+    const inputs = [1, 0, -1, 1, 1, 0, -1] as const
+    let first = createSimulation(1234, noUpgrades, { spawnCooldownMs: 0 })
+    let second = createSimulation(1234, noUpgrades, { spawnCooldownMs: 0 })
+
+    for (const moveX of inputs) {
+      first = stepSimulation(first, { moveX, paused: false })
+      second = stepSimulation(second, { moveX, paused: false })
+    }
+
+    expect(first).toEqual(second)
+    expect(first.seed).toBe(second.seed)
+    expect(first.events).toEqual(second.events)
+  })
+
   it("Given mixed entities at cap When stepped Then firing and spawning preserve the cap", () => {
     const zombies = Array.from({ length: 59 }, (_, id) => ({
       id,

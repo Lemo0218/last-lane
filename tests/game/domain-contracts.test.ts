@@ -9,6 +9,12 @@ const noUpgrades: UpgradeLevels = { troop: 0, damage: 0, fireRate: 0, recovery: 
 
 describe("opaque domain contracts", () => {
   it.each([
+    -1, 0x1_0000_0000,
+  ])("Given invalid seed %s When created Then rejects uint32 overflow", (seed) => {
+    expect(() => createSimulation(seed, noUpgrades)).toThrow()
+    expect(() => createSimulation(1, noUpgrades, { seed })).toThrow()
+  })
+  it.each([
     -1,
     0,
     1.5,
@@ -87,5 +93,22 @@ describe("opaque domain contracts", () => {
         { moveX: 0, paused: false },
       ]),
     ).toThrow()
+  })
+
+  it.each([
+    "troop",
+    "damage",
+    "fire-rate",
+    "recovery",
+  ] as const)("Given overflowing %s gate When collected Then rejects before producing state", (kind) => {
+    const state = createSimulation(
+      1,
+      { troop: 1, damage: 1, fireRate: 1, recovery: 1 },
+      {
+        gates: [{ id: 1, kind, x: 0, level: Number.MAX_SAFE_INTEGER }],
+      },
+    )
+
+    expect(() => stepSimulation(state, { moveX: 0, paused: false })).toThrow()
   })
 })
