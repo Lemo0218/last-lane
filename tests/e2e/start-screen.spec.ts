@@ -1,4 +1,12 @@
-import { expect, test } from "@playwright/test"
+import { expect, type Page, test } from "@playwright/test"
+
+const completeTutorialAndStartGame = async (page: Page): Promise<void> => {
+  const tutorial = page.getByRole("dialog", { name: "좌우로 길을 선택하세요" })
+  await expect(tutorial).toBeVisible()
+  await tutorial.getByRole("button", { name: "확인" }).click()
+  await expect(tutorial).not.toBeVisible()
+  await page.getByRole("button", { name: "게임 시작" }).click()
+}
 
 test("shows the Korean start screen in a mobile browser", async ({ page }) => {
   // Given: a player opens the deployed application
@@ -13,7 +21,7 @@ test("shows the Korean start screen in a mobile browser", async ({ page }) => {
 test("plays with the touch joystick and pauses and resumes on mobile", async ({ page }) => {
   // Given: a player starts the Canvas game
   await page.goto("/")
-  await page.getByRole("button", { name: "게임 시작" }).click()
+  await completeTutorialAndStartGame(page)
   const joystick = page.getByRole("slider", { name: "이동 조이스틱" })
   const bounds = await joystick.boundingBox()
   expect(bounds).not.toBeNull()
@@ -40,7 +48,7 @@ test("plays with the touch joystick and pauses and resumes on mobile", async ({ 
 test("materializes boss combat and moves through touch pointer input", async ({ page }) => {
   // Given: deterministic boss mode starts on the fifth wave
   await page.goto("/?testMode=timeout-boss")
-  await page.getByRole("button", { name: "게임 시작" }).click()
+  await completeTutorialAndStartGame(page)
   const game = page.locator(".game-shell")
   const joystick = page.getByRole("slider", { name: "이동 조이스틱" })
   const initialX = Number(await game.getAttribute("data-player-x"))
@@ -67,7 +75,7 @@ test("materializes boss combat and moves through touch pointer input", async ({ 
 test("auto-fire kills a basic zombie and increases the browser score", async ({ page }) => {
   // Given: a normal first wave using production combat rules
   await page.goto("/")
-  await page.getByRole("button", { name: "게임 시작" }).click()
+  await completeTutorialAndStartGame(page)
   const game = page.locator(".game-shell")
   const joystick = page.getByRole("slider", { name: "이동 조이스틱" })
   await expect(game).toHaveAttribute("data-gates", "1")
