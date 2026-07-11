@@ -32,7 +32,7 @@ export const accumulateRunScore = (
   bosses:
     counters.bosses +
     events.filter((event) => event.kind === "zombie-killed" && event.zombieKind === "boss").length,
-  closeCalls: counters.closeCalls,
+  closeCalls: counters.closeCalls + events.filter((event) => event.kind === "close-call").length,
 })
 
 export const finalRunScore = (counters: RunScoreCounters, elapsedMs: number): ScoreBreakdown =>

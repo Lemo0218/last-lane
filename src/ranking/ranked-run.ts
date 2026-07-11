@@ -3,7 +3,7 @@ import type { RunTicket, Submission } from "./client"
 
 type RankedOutcome =
   | Readonly<{ kind: "ranked"; rank: number }>
-  | Readonly<{ kind: "queued" }>
+  | Readonly<{ kind: "queued"; token: string }>
   | Readonly<{ kind: "unranked" }>
 type Dependencies = Readonly<{
   requestTicket: () => Promise<RunTicket>
@@ -19,11 +19,16 @@ export const createRankedRun = ({
   now = Date.now,
 }: Dependencies) => {
   let ticket: RunTicket | undefined
+  let generation = 0
   return {
     start: async (): Promise<boolean> => {
+      const currentGeneration = generation + 1
+      generation = currentGeneration
       ticket = undefined
       try {
-        ticket = await requestTicket()
+        const requested = await requestTicket()
+        if (currentGeneration !== generation) return false
+        ticket = requested
         return true
       } catch (error) {
         if (error instanceof Error) return false
@@ -42,7 +47,7 @@ export const createRankedRun = ({
       } catch (error) {
         if (!(error instanceof TypeError)) throw error
         enqueue(payload)
-        return { kind: "queued" }
+        return { kind: "queued", token: payload.ticket.token }
       }
     },
   }

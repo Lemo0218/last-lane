@@ -1,10 +1,11 @@
-import { describe, expect, it, vi } from "vitest"
+import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import { createRankingClient } from "../../src/ranking/client"
 import { createRankedRun } from "../../src/ranking/ranked-run"
 import { createRetryQueue } from "../../src/ranking/retry-queue"
 
 describe("ranking progression", () => {
+  beforeEach(() => localStorage.clear())
   it("stops ticket-aware retries at the submission deadline", async () => {
     // Given
     const submit = vi.fn().mockRejectedValue(new TypeError("offline"))
@@ -70,7 +71,7 @@ describe("ranking progression", () => {
     // When
     const outcome = await session.finish("러너", [])
     // Then
-    expect(outcome).toEqual({ kind: "queued" })
+    expect(outcome).toEqual({ kind: "queued", token: "ticket" })
     expect(enqueue).toHaveBeenCalledOnce()
   })
 
@@ -163,6 +164,17 @@ describe("ranking progression", () => {
     // Then
     expect(submitted.rank).toBe(2)
     expect(board.entries[0]?.nickname).toBe("에이스")
+  })
+
+  it("rejects an excessively long leaderboard nickname at the HTTP boundary", async () => {
+    const client = createRankingClient({
+      post: vi.fn(),
+      get: vi.fn().mockReturnValue({
+        json: () =>
+          Promise.resolve({ entries: [{ rank: 1, nickname: "가".repeat(17), score: 1 }] }),
+      }),
+    })
+    await expect(client.leaderboard()).rejects.toThrow()
   })
 
   it("requests and parses a run ticket at the HTTP boundary", async () => {

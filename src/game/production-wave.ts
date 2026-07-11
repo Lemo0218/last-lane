@@ -10,6 +10,7 @@ export type ProductionWaveState = Readonly<{
   atMs: number
   collectedGateIds: ReadonlySet<string>
   spawnedBlockerIds: ReadonlySet<string>
+  closeCallBlockerIds: ReadonlySet<string>
 }>
 
 export const createProductionWaveState = (entry: EntryState): ProductionWaveState => ({
@@ -23,6 +24,7 @@ export const createProductionWaveState = (entry: EntryState): ProductionWaveStat
   atMs: 0,
   collectedGateIds: new Set(),
   spawnedBlockerIds: new Set(),
+  closeCallBlockerIds: new Set(),
 })
 
 const waveNumber = (segment: WaveSegment): number => {
@@ -86,15 +88,28 @@ export const stepProductionWave = (
   }))
   const gateResult = collectGates({ ...stepped, gates: productionGates }, playerX)
   let squad = gateResult.squad
-  for (const blocker of segment.blockers) {
+  const closeCalls = new Set(state.closeCallBlockerIds)
+  const closeCallEvents: Array<Readonly<{ kind: "close-call"; blockerId: string }>> = []
+  for (const [index, blocker] of segment.blockers.entries()) {
     const radius = entry.playerRadius + entry.blockerRadius
-    if (
-      blocker.fromMs < atMs &&
-      blocker.toMs >= atMs - STEP_MS &&
+    const blockerId = `${segment.id}:${index}`
+    const active = blocker.fromMs < atMs && blocker.toMs >= atMs - STEP_MS
+    const collides =
+      active &&
       Math.max(beforeX, playerX) + radius >= blocker.minX &&
       Math.min(beforeX, playerX) - radius <= blocker.maxX
-    )
-      squad = Math.max(0, squad - blocker.damage)
+    if (collides) squad = Math.max(0, squad - blocker.damage)
+    const nearRadius = radius + 24
+    if (
+      active &&
+      !collides &&
+      !closeCalls.has(blockerId) &&
+      Math.max(beforeX, playerX) + nearRadius >= blocker.minX &&
+      Math.min(beforeX, playerX) - nearRadius <= blocker.maxX
+    ) {
+      closeCalls.add(blockerId)
+      closeCallEvents.push({ kind: "close-call", blockerId })
+    }
   }
   const collected = new Set(state.collectedGateIds)
   for (const gate of collidedWaveGates) collected.add(gate.id)
@@ -118,10 +133,11 @@ export const stepProductionWave = (
       recoveryEveryMs: gateResult.recoveryEveryMs,
       recoveryAmount: gateResult.recoveryAmount,
       gates: [],
-      events: [...stepped.events, ...gateResult.events],
+      events: [...stepped.events, ...gateResult.events, ...closeCallEvents],
     },
     atMs,
     collectedGateIds: collected,
     spawnedBlockerIds: spawnedBlockers,
+    closeCallBlockerIds: closeCalls,
   }
 }

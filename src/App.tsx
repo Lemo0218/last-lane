@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
 import { GameCanvas } from "./game/GameCanvas"
 import type { ScoreBreakdown } from "./game/scoring"
@@ -14,7 +14,8 @@ import { StartScreen } from "./ui/StartScreen"
 import { Tutorial } from "./ui/Tutorial"
 
 type Screen = "start" | "playing" | "result" | "leaderboard"
-type CompletedRun = Readonly<{ score: ResultScore; transcript: Transcript }>
+type CompletedRun = Readonly<{ id: number; score: ResultScore; transcript: Transcript }>
+type SubmissionState = "idle" | "pending" | "accepted" | "queued"
 
 type AppProps = Readonly<{
   rankingClient?: ReturnType<typeof createRankingClient>
@@ -41,12 +42,21 @@ export function App({ rankingClient, storage = localStorage, runtimeFactory }: A
   const [run, setRun] = useState<CompletedRun>()
   const [rank, setRank] = useState<number>()
   const [board, setBoard] = useState<LeaderboardResult>()
+  const [submissionState, setSubmissionState] = useState<SubmissionState>("idle")
+  const [playingRunId, setPlayingRunId] = useState(0)
+  const generationRef = useRef(0)
+  const submissionNonceRef = useRef(0)
+  const visibleSubmissionRef = useRef<string | undefined>(undefined)
 
   const refreshRanking = useCallback(
-    async (acceptedRank: number): Promise<void> => {
-      setRank(acceptedRank)
-      setOffline(false)
-      setBoard(await client.leaderboard())
+    async (acceptedRank?: number, visible = false): Promise<void> => {
+      if (visible && acceptedRank !== undefined) {
+        setRank(acceptedRank)
+        setOffline(false)
+        setSubmissionState("accepted")
+      }
+      const refreshed = await client.leaderboard()
+      setBoard(refreshed)
     },
     [client],
   )
@@ -57,7 +67,12 @@ export function App({ rankingClient, storage = localStorage, runtimeFactory }: A
         .flush(client.submit)
         .then((accepted) => {
           const latest = accepted.at(-1)
-          if (latest !== undefined) void refreshRanking(latest.rank)
+          if (latest !== undefined) {
+            void refreshRanking(
+              latest.rank,
+              latest.submission.ticket.token === visibleSubmissionRef.current,
+            )
+          }
         })
         .catch((error: unknown) => {
           console.warn(
@@ -72,13 +87,21 @@ export function App({ rankingClient, storage = localStorage, runtimeFactory }: A
   }, [client, queue, refreshRanking])
 
   const start = async (): Promise<void> => {
+    const generation = generationRef.current + 1
+    generationRef.current = generation
+    submissionNonceRef.current += 1
+    visibleSubmissionRef.current = undefined
+    setSubmissionState("idle")
     const ranked = navigator.onLine && (await session.start())
+    if (generation !== generationRef.current) return
     setOffline(!ranked)
     setRank(undefined)
+    setPlayingRunId(generation)
     setScreen("playing")
   }
   const finish = useCallback(
-    (result: Readonly<{ score: ScoreBreakdown; transcript: Transcript }>): void => {
+    (runId: number, result: Readonly<{ score: ScoreBreakdown; transcript: Transcript }>): void => {
+      if (runId !== generationRef.current) return
       const breakdown = {
         distance: result.score.distance,
         basicKills: result.score.basicKills,
@@ -89,25 +112,31 @@ export function App({ rankingClient, storage = localStorage, runtimeFactory }: A
         total: result.score.total,
       }
       progress.recordBest(result.score.total)
-      setRun({ score: breakdown, transcript: result.transcript })
+      setRun({ id: runId, score: breakdown, transcript: result.transcript })
+      setSubmissionState("idle")
       setScreen("result")
     },
     [progress],
   )
   const openLeaderboard = async (): Promise<void> => {
+    const generation = generationRef.current
     try {
       setBoard(await client.leaderboard())
     } catch (error) {
       if (!(error instanceof Error)) throw error
       setBoard(undefined)
     }
+    if (generation !== generationRef.current) return
     setScreen("leaderboard")
   }
   if (screen === "playing")
     return runtimeFactory === undefined ? (
-      <GameCanvas onFinish={finish} />
+      <GameCanvas onFinish={(result) => finish(playingRunId, result)} />
     ) : (
-      <GameCanvas runtimeFactory={runtimeFactory} onFinish={finish} />
+      <GameCanvas
+        runtimeFactory={runtimeFactory}
+        onFinish={(result) => finish(playingRunId, result)}
+      />
     )
   if (screen === "leaderboard")
     return (
@@ -123,14 +152,26 @@ export function App({ rankingClient, storage = localStorage, runtimeFactory }: A
         personalBest={progress.best()}
         rank={rank}
         offline={offline}
+        submissionState={submissionState}
         onReplay={() => void start()}
         onLeaderboard={() => void openLeaderboard()}
-        onSubmit={(nickname) =>
+        onSubmit={(nickname) => {
+          if (submissionState !== "idle") return
+          const nonce = submissionNonceRef.current + 1
+          submissionNonceRef.current = nonce
+          const runId = run.id
+          setSubmissionState("pending")
           void session.finish(nickname, run.transcript).then((outcome) => {
-            if (outcome.kind === "ranked") void refreshRanking(outcome.rank)
-            if (outcome.kind !== "ranked") setOffline(true)
+            if (runId !== generationRef.current || nonce !== submissionNonceRef.current) return
+            if (outcome.kind === "ranked") void refreshRanking(outcome.rank, true)
+            if (outcome.kind === "queued") {
+              visibleSubmissionRef.current = outcome.token
+              setOffline(true)
+              setSubmissionState("queued")
+            }
+            if (outcome.kind === "unranked") setOffline(true)
           })
-        }
+        }}
       />
     )
   return (

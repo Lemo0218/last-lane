@@ -51,6 +51,7 @@ export type SimulationEvent =
   | Readonly<{ kind: "squad-recovered"; amount: number }>
   | Readonly<{ kind: "boss-spawned"; zombieId: number }>
   | Readonly<{ kind: "gate-collected"; gateKind: GateKind; level: number }>
+  | Readonly<{ kind: "close-call"; blockerId: string }>
   | Readonly<{ kind: "run-completed" }>
   | Readonly<{ kind: "game-over" }>
 

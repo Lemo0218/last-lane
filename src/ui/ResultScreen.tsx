@@ -14,6 +14,7 @@ type Props = Readonly<{
   personalBest: number
   rank?: number | undefined
   offline?: boolean
+  submissionState?: "idle" | "pending" | "accepted" | "queued"
   onReplay: () => void
   onSubmit?: (nickname: string) => void
   onLeaderboard?: () => void
@@ -24,12 +25,22 @@ export const ResultScreen = ({
   personalBest,
   rank,
   offline = false,
+  submissionState = "idle",
   onReplay,
   onSubmit,
   onLeaderboard,
 }: Props) => {
   const replayRef = useRef<HTMLButtonElement>(null)
   const [nickname, setNickname] = useState("")
+  const locked = submissionState !== "idle"
+  const submitLabel =
+    submissionState === "pending"
+      ? "등록 중"
+      : submissionState === "accepted"
+        ? "등록 완료"
+        : submissionState === "queued"
+          ? "전송 대기 중"
+          : "랭킹 등록"
   useEffect(() => replayRef.current?.focus(), [])
   return (
     <main className="panel-screen">
@@ -72,16 +83,17 @@ export const ResultScreen = ({
             aria-label="닉네임"
             maxLength={16}
             value={nickname}
+            disabled={locked}
             onChange={(event) => setNickname(event.currentTarget.value)}
           />
         </label>
         <button
           className="primary-action"
           type="button"
-          disabled={offline || nickname.trim().length === 0}
+          disabled={locked || offline || nickname.trim().length === 0}
           onClick={() => onSubmit?.(nickname.trim())}
         >
-          랭킹 등록
+          {submitLabel}
         </button>
         <button ref={replayRef} className="secondary-action" type="button" onClick={onReplay}>
           다시 달리기

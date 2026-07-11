@@ -58,4 +58,48 @@ describe("ResultScreen", () => {
     // Then
     expect(screen.getByText("오프라인 · 랭킹 미반영")).toBeInTheDocument()
   })
+
+  it("locks submission while pending and after it is queued", () => {
+    const submit = vi.fn()
+    const { rerender } = render(
+      <ResultScreen
+        score={{
+          distance: 1,
+          basicKills: 0,
+          elites: 0,
+          bosses: 0,
+          closeCalls: 0,
+          survivalBonus: 0,
+          total: 1,
+        }}
+        personalBest={1}
+        submissionState="pending"
+        onReplay={vi.fn()}
+        onSubmit={submit}
+      />,
+    )
+    fireEvent.change(screen.getByLabelText("닉네임"), { target: { value: "러너" } })
+    const button = screen.getByRole("button", { name: "등록 중" })
+    expect(button).toBeDisabled()
+    fireEvent.click(button)
+    expect(submit).not.toHaveBeenCalled()
+    rerender(
+      <ResultScreen
+        score={{
+          distance: 1,
+          basicKills: 0,
+          elites: 0,
+          bosses: 0,
+          closeCalls: 0,
+          survivalBonus: 0,
+          total: 1,
+        }}
+        personalBest={1}
+        submissionState="queued"
+        onReplay={vi.fn()}
+        onSubmit={submit}
+      />,
+    )
+    expect(screen.getByRole("button", { name: "전송 대기 중" })).toBeDisabled()
+  })
 })

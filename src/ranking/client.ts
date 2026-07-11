@@ -22,7 +22,7 @@ const leaderboardSchema = z.object({
     .array(
       z.object({
         rank: z.number().int().positive(),
-        nickname: z.string(),
+        nickname: z.string().trim().min(1).max(16),
         score: z.number().int().nonnegative(),
       }),
     )
