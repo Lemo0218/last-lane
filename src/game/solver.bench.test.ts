@@ -27,9 +27,9 @@ it.each([
   blockers[0] = { fromMs: 0, toMs: 100, minX: 0, maxX: 1_000, damage: 1 }
   const segment: WaveSegment = { id: "worst", horizonMs, blockers, gates: [] }
   const wallStartedAt = performance.now()
-  const result = solveWave(state, segment, { budgetMs: 4 })
+  const result = solveWave(state, segment)
   const wallElapsedMs = performance.now() - wallStartedAt
   expect(result.elapsedMs).toBeLessThanOrEqual(4)
-  expect(wallElapsedMs).toBeLessThan(20)
+  expect(wallElapsedMs).toBeLessThanOrEqual(4)
   expect(result.kind).toBe("fallback")
 })

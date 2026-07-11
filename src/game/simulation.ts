@@ -14,10 +14,9 @@ import type {
   Zombie,
   ZombieKind,
 } from "./types"
-import { position, tick } from "./types"
+import { position, tick, velocity } from "./types"
 import { requireNatural, requireUint32 } from "./validation"
 
-const PLAYER_SPEED_PER_STEP = 8
 const PROJECTILE_SPEED_PER_STEP = 40
 const COLLISION_DISTANCE = 12
 
@@ -37,6 +36,7 @@ export const createSimulation = (
     elapsedMs: tick(0),
     distance: position(0),
     playerX: position(0),
+    playerVelocity: velocity(0),
     squad: maximumSquad,
     maximumSquad,
     shotDamage: 10 + upgrades.damage * 5,
@@ -62,6 +62,7 @@ export const createSimulation = (
     elapsedMs: tick(overrides.elapsedMs ?? 0),
     distance: position(overrides.distance ?? 0),
     playerX: position(overrides.playerX ?? 0),
+    playerVelocity: velocity(overrides.playerVelocity ?? 0),
     zombies: (overrides.zombies ?? []).map((zombie) => ({ ...zombie, x: position(zombie.x) })),
     projectiles: (overrides.projectiles ?? []).map((projectile) => ({
       ...projectile,
@@ -139,10 +140,8 @@ export const stepSimulation = (
     throw new RangeError("moveX must be -1, 0, or 1")
   }
   const elapsedMs = state.elapsedMs + deltaMs
-  const playerX = Math.min(
-    WORLD_MAX_X,
-    Math.max(WORLD_MIN_X, state.playerX + input.moveX * PLAYER_SPEED_PER_STEP),
-  )
+  const playerVelocity = Math.max(-40, Math.min(40, state.playerVelocity + input.moveX))
+  const playerX = Math.min(WORLD_MAX_X, Math.max(WORLD_MIN_X, state.playerX + playerVelocity))
   const gates = collectGates(state, playerX)
   const events: SimulationEvent[] = [...gates.events]
   let nextId = state.nextEntityId
@@ -218,8 +217,11 @@ export const stepSimulation = (
     ...state,
     seed: nextRandom(state.seed).seed,
     elapsedMs: tick(elapsedMs),
-    distance: position(state.distance + Math.abs(input.moveX * PLAYER_SPEED_PER_STEP)),
+    distance: position(state.distance + Math.abs(playerVelocity)),
     playerX: position(playerX),
+    playerVelocity: velocity(
+      playerX === WORLD_MIN_X || playerX === WORLD_MAX_X ? 0 : playerVelocity,
+    ),
     squad,
     maximumSquad: gates.maximumSquad,
     shotDamage: gates.shotDamage,

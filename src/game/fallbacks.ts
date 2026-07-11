@@ -1,4 +1,3 @@
-import { createProductionWaveState, stepProductionWave } from "./production-wave"
 import type { EntryState, WaveSegment, WaveWitness, WitnessFrame } from "./waves"
 import { NORMAL_HORIZON_MS, SOLVER_STEP_MS } from "./waves"
 
@@ -11,6 +10,9 @@ export type FallbackPattern = Readonly<{
     playfieldWidth: readonly [number, number]
     collisionRadii: readonly [number, number]
     precedingSegments: readonly [number, number]
+    upgrades: Readonly<
+      Record<"troop" | "damage" | "fireRate" | "recovery", readonly [number, number]>
+    >
   }>
   precondition: (entry: EntryState) => boolean
   segment: (entry: EntryState) => WaveSegment
@@ -24,30 +26,29 @@ const openSegment = (): WaveSegment => ({
   gates: [],
 })
 
+const NEUTRAL_INPUTS = Object.freeze(
+  Array.from({ length: NORMAL_HORIZON_MS / 10 }, () =>
+    Object.freeze({ moveX: 0 as const, paused: false }),
+  ),
+)
+
 const neutralWitness = (entry: EntryState): WaveWitness => {
-  const segment = openSegment()
   const frames: WitnessFrame[] = []
-  let state = createProductionWaveState(entry)
-  const productionInputs = Array.from({ length: NORMAL_HORIZON_MS / 10 }, () => ({
-    moveX: 0 as const,
-    paused: false,
-  }))
-  for (const input of productionInputs) {
-    state = stepProductionWave(entry, segment, state, input)
-    if (state.atMs % SOLVER_STEP_MS === 0)
-      frames.push({
-        atMs: state.atMs,
-        move: 0,
-        x: state.simulation.playerX,
-        velocity: 0,
-        squad: state.simulation.squad,
-      })
+  let x = entry.x
+  let currentVelocity = entry.velocity
+  for (let atMs = SOLVER_STEP_MS; atMs <= NORMAL_HORIZON_MS; atMs += SOLVER_STEP_MS) {
+    for (let tickIndex = 0; tickIndex < SOLVER_STEP_MS / 10; tickIndex += 1) {
+      x = Math.max(0, Math.min(entry.playfieldWidth, x + currentVelocity))
+      if (x === 0 || x === entry.playfieldWidth) currentVelocity = 0
+    }
+    frames.push({ atMs, move: 0, x, velocity: currentVelocity, squad: entry.squad })
   }
   return {
     frames,
-    productionInputs,
-    finalSquad: state.simulation.squad,
-    finalX: state.simulation.playerX,
+    productionInputs: NEUTRAL_INPUTS,
+    finalSquad: entry.squad,
+    finalX: x,
+    finalVelocity: currentVelocity,
     collectedGateIds: [],
   }
 }
@@ -62,10 +63,17 @@ export const fallbackPatterns: readonly FallbackPattern[] = [
       playfieldWidth: [1, 1_000],
       collisionRadii: [0, 500],
       precedingSegments: [0, 2],
+      upgrades: {
+        troop: [0, 100],
+        damage: [0, 100],
+        fireRate: [0, 100],
+        recovery: [0, 100],
+      },
     },
     precondition: (entry) =>
       Object.values(entry.upgrades).every(Number.isFinite) &&
       Object.values(entry.upgrades).every((level) => level >= 0) &&
+      Object.values(entry.upgrades).every((level) => level <= 100) &&
       [
         entry.squad,
         entry.x,

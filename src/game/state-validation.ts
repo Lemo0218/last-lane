@@ -26,6 +26,8 @@ export const validateSimulationState = (state: SimulationState): SimulationState
     ["combo expiry", state.comboExpiresMs],
   ] as const
   for (const [field, value] of fields) requireNatural(field, value)
+  if (!Number.isSafeInteger(state.playerVelocity))
+    throw new RangeError("player velocity must be a safe integer")
   for (const zombie of state.zombies) {
     requireNatural("zombie id", zombie.id)
     requireNatural("zombie position", zombie.x)

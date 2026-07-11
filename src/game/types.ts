@@ -7,13 +7,19 @@ import { requireNatural } from "./validation"
 declare const tickBrand: unique symbol
 declare const positionBrand: unique symbol
 declare const scoreBrand: unique symbol
+declare const velocityBrand: unique symbol
 export type Tick = number & { readonly [tickBrand]: "Tick" }
 export type Position = number & { readonly [positionBrand]: "Position" }
 export type Score = number & { readonly [scoreBrand]: "Score" }
+export type Velocity = number & { readonly [velocityBrand]: "Velocity" }
 
 export const tick = (value: number): Tick => requireNatural("tick", value) as Tick
 export const position = (value: number): Position => requireNatural("position", value) as Position
 export const score = (value: number): Score => requireNatural("score", value) as Score
+export const velocity = (value: number): Velocity => {
+  if (!Number.isSafeInteger(value)) throw new RangeError("velocity must be a safe integer")
+  return value as Velocity
+}
 
 export type UpgradeLevels = Readonly<{
   troop: number
@@ -58,6 +64,7 @@ export type SimulationState = Readonly<{
   elapsedMs: Tick
   distance: Position
   playerX: Position
+  playerVelocity: Velocity
   squad: number
   maximumSquad: number
   shotDamage: number
@@ -82,12 +89,16 @@ type RawZombie = Omit<Zombie, "x"> & Readonly<{ x: number }>
 type RawProjectile = Omit<Projectile, "x"> & Readonly<{ x: number }>
 type RawGate = Omit<Gate, "x"> & Readonly<{ x: number }>
 export type SimulationOverrides = Partial<
-  Omit<SimulationState, "elapsedMs" | "distance" | "playerX" | "zombies" | "projectiles" | "gates">
+  Omit<
+    SimulationState,
+    "elapsedMs" | "distance" | "playerX" | "playerVelocity" | "zombies" | "projectiles" | "gates"
+  >
 > &
   Readonly<{
     elapsedMs?: number
     distance?: number
     playerX?: number
+    playerVelocity?: number
     zombies?: readonly RawZombie[]
     projectiles?: readonly RawProjectile[]
     gates?: readonly RawGate[]

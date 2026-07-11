@@ -71,7 +71,7 @@ describe("wave solver", () => {
       { clock: { now: () => (instant += 2) } },
     )
     expect(result.kind).toBe("fallback")
-    expect(result.elapsedMs).toBeGreaterThan(4)
+    expect(result.elapsedMs).toBeLessThanOrEqual(4)
   })
 
   it("requires a time-connected corridor rather than pointwise gaps", () => {
@@ -85,6 +85,18 @@ describe("wave solver", () => {
       gates: [],
     }
     expect(solveWave(entry({ x: 10 }), segment).kind).toBe("fallback")
+  })
+
+  it("uses nonzero production velocity when deciding reachability", () => {
+    const segment: WaveSegment = {
+      id: "momentum",
+      horizonMs: 6_000,
+      blockers: [{ fromMs: 250, toMs: 500, minX: 0, maxX: 50, damage: 4 }],
+      gates: [],
+    }
+    const clock = { now: () => 0 }
+    expect(solveWave(entry({ x: 60, velocity: 10 }), segment, { clock }).kind).toBe("accepted")
+    expect(solveWave(entry({ x: 60, velocity: -10 }), segment, { clock }).kind).toBe("fallback")
   })
 
   it("chooses survival over a reward before a boss", () => {

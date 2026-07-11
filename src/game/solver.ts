@@ -28,7 +28,7 @@ export const squadHealthBin = (squad: number): number => Math.floor(squad / 3)
 
 const stateKey = (state: SearchState): string => {
   const simulation = state.production.simulation
-  return `${Math.round(simulation.playerX)}:0:${squadHealthBin(simulation.squad)}:${[...state.production.collectedGateIds].sort().join(",")}`
+  return `${Math.round(simulation.playerX)}:${simulation.playerVelocity}:${squadHealthBin(simulation.squad)}:${[...state.production.collectedGateIds].sort().join(",")}`
 }
 
 const expandAction = (
@@ -58,7 +58,7 @@ const expandAction = (
         atMs: production.atMs,
         move,
         x: simulation.playerX,
-        velocity: 0,
+        velocity: simulation.playerVelocity,
         squad: simulation.squad,
       },
     ],
@@ -70,6 +70,7 @@ const witnessOf = (state: SearchState): WaveWitness => ({
   productionInputs: state.inputs,
   finalSquad: state.production.simulation.squad,
   finalX: state.production.simulation.playerX,
+  finalVelocity: state.production.simulation.playerVelocity,
   collectedGateIds: [...state.production.collectedGateIds],
 })
 
@@ -91,13 +92,17 @@ const hasContinuousEntry = (entry: EntryState): boolean => {
 const fallbackResult = (
   entry: EntryState,
   segment: WaveSegment,
-  elapsedMs: number,
-): SolverResult => ({
-  kind: "fallback",
-  rejectedSegment: segment,
-  ...fallbackFor(entry),
-  elapsedMs,
-})
+  clock: Clock,
+  startedAt: number,
+): SolverResult => {
+  const fallback = fallbackFor(entry)
+  return {
+    kind: "fallback",
+    rejectedSegment: segment,
+    ...fallback,
+    elapsedMs: clock.now() - startedAt,
+  }
+}
 
 export const solveWave = (
   entry: EntryState,
@@ -107,14 +112,15 @@ export const solveWave = (
   const clock = options.clock ?? { now: () => performance.now() }
   const budgetMs = options.budgetMs ?? 4
   const startedAt = clock.now()
-  const deadline = startedAt + budgetMs
+  const deadline = startedAt + budgetMs / 2
   if (!hasContinuousEntry(entry) || !hasEscapeCorridor(entry, segment))
-    return fallbackResult(entry, segment, clock.now() - startedAt)
+    return fallbackResult(entry, segment, clock, startedAt)
   for (const policy of moves) {
     let state: SearchState | null = initialState(entry)
     for (let atMs = SOLVER_STEP_MS; atMs <= segment.horizonMs; atMs += SOLVER_STEP_MS) {
       state = state === null ? null : expandAction(entry, segment, state, policy, deadline, clock)
-      if (state === null || state.production.simulation.squad < 1) break
+      if (state === null) return fallbackResult(entry, segment, clock, startedAt)
+      if (state.production.simulation.squad < 1) break
     }
     if (state !== null && state.production.atMs === segment.horizonMs) {
       const witness = witnessOf(state)
@@ -129,7 +135,7 @@ export const solveWave = (
     for (const state of frontier) {
       for (const move of moves) {
         const candidate = expandAction(entry, segment, state, move, deadline, clock)
-        if (candidate === null) return fallbackResult(entry, segment, clock.now() - startedAt)
+        if (candidate === null) return fallbackResult(entry, segment, clock, startedAt)
         if (candidate.production.simulation.squad < 1) continue
         const key = stateKey(candidate)
         const previous = deduplicated.get(key)
@@ -149,5 +155,5 @@ export const solveWave = (
     if (replayWitness(entry, segment, witness).survived)
       return { kind: "accepted", segment, witness, elapsedMs: clock.now() - startedAt }
   }
-  return fallbackResult(entry, segment, clock.now() - startedAt)
+  return fallbackResult(entry, segment, clock, startedAt)
 }

@@ -1,7 +1,7 @@
 import { STEP_MS } from "./config"
 import { createSimulation, stepSimulation } from "./simulation"
 import type { Gate, SimulationInput, SimulationState } from "./types"
-import { position, tick } from "./types"
+import { position, tick, velocity } from "./types"
 import type { EntryState, WaveSegment } from "./waves"
 
 export type ProductionWaveState = Readonly<{
@@ -13,6 +13,7 @@ export type ProductionWaveState = Readonly<{
 export const createProductionWaveState = (entry: EntryState): ProductionWaveState => ({
   simulation: createSimulation(1, entry.upgrades, {
     playerX: entry.x,
+    playerVelocity: entry.velocity,
     squad: entry.squad,
     maximumSquad: Math.max(entry.squad, 3 + entry.upgrades.troop),
     spawnCooldownMs: Number.MAX_SAFE_INTEGER,
@@ -66,7 +67,14 @@ export const stepProductionWave = (
     if (gate !== undefined) collected.add(gate.id)
   }
   return {
-    simulation: { ...stepped, playerX, squad, gates: [] },
+    simulation: {
+      ...stepped,
+      playerX,
+      playerVelocity:
+        playerX === 0 || playerX === entry.playfieldWidth ? velocity(0) : stepped.playerVelocity,
+      squad,
+      gates: [],
+    },
     atMs,
     collectedGateIds: collected,
   }

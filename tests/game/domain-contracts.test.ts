@@ -3,7 +3,7 @@ import { MAX_ENTITIES, STEP_MS } from "../../src/game/config"
 import { scoreRun } from "../../src/game/scoring"
 import { createSimulation, stepSimulation } from "../../src/game/simulation"
 import type { UpgradeLevels } from "../../src/game/types"
-import { position, score, tick } from "../../src/game/types"
+import { position, score, tick, velocity } from "../../src/game/types"
 
 const noUpgrades: UpgradeLevels = { troop: 0, damage: 0, fireRate: 0, recovery: 0 }
 
@@ -63,6 +63,7 @@ describe("opaque domain contracts", () => {
 
     expect(state.elapsedMs).toEqual(tick(0))
     expect(state.playerX).toEqual(position(0))
+    expect(state.playerVelocity).toEqual(velocity(0))
     expect(state.zombies[0]?.x).toEqual(position(500))
   })
 

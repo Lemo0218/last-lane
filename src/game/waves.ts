@@ -55,6 +55,7 @@ export type WaveWitness = Readonly<{
   productionInputs: readonly SimulationInput[]
   finalSquad: number
   finalX: number
+  finalVelocity: number
   collectedGateIds: readonly string[]
 }>
 export type ReplayResult = Readonly<{
@@ -122,6 +123,7 @@ export const replayWitness = (
     witness.frames.length === segment.horizonMs / SOLVER_STEP_MS &&
     witness.finalX === finalX &&
     witness.finalSquad === finalSquad &&
+    witness.finalVelocity === state.simulation.playerVelocity &&
     witness.collectedGateIds.join() === collectedGateIds.join()
   return {
     survived: finalSquad >= 1 && exact,
@@ -129,7 +131,7 @@ export const replayWitness = (
     escapeCorridor: hasEscapeCorridor(entry, segment),
     finalSquad,
     finalX,
-    finalVelocity: 0,
+    finalVelocity: state.simulation.playerVelocity,
     collectedGateIds,
   }
 }
