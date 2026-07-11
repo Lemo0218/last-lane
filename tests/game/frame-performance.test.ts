@@ -7,9 +7,16 @@ describe("frame performance telemetry", () => {
     const metrics = createFramePerformance()
 
     // When: enough frames are observed to include a slow tail
-    for (let index = 1; index <= 100; index += 1) metrics.record(index / 10, 100 + index, index)
+    for (let index = 1; index <= 100; index += 1)
+      metrics.record(index / 10, 100 + index, index, index === 100 ? 51 : index / 3)
 
     // Then: p95 uses the nearest-rank sample and caps retain their high-water marks
-    expect(metrics.snapshot()).toEqual({ p95WorkMs: 9.5, maxEntities: 200, maxEffects: 100 })
+    expect(metrics.snapshot()).toEqual({
+      p95WorkMs: 9.5,
+      p95IntervalMs: 31.666666666666668,
+      longFrames: 1,
+      maxEntities: 200,
+      maxEffects: 100,
+    })
   })
 })

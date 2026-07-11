@@ -17,26 +17,21 @@ const damageEvents = Array.from({ length: 8 }, () => ({
 export const createStressFrame = (source: SimulationState): StressFrame => {
   const state: SimulationState = {
     ...source,
-    zombies: Array.from({ length: 64 }, (_, index) => ({
+    zombies: [],
+    projectiles: [],
+    gates: Array.from({ length: 128 }, (_, index) => ({
       id: index + 1,
-      kind: "basic" as const,
+      kind: "damage" as const,
       x: position(1_000),
-      hp: 100,
-      damage: 1,
+      level: 1,
     })),
-    projectiles: Array.from({ length: 64 }, (_, index) => ({
-      id: index + 65,
-      x: position(0),
-      damage: 1,
-    })),
-    gates: [],
     nextEntityId: 129,
   }
   const effects = createEffectPool().step(damageEvents, 0).effects
   const frame = (current: SimulationState): StressFrame => ({
     state: current,
     effects,
-    step: () => frame(stepSimulation(current, { moveX: 0, paused: true })),
+    step: () => frame(stepSimulation(current, { moveX: 0, paused: false })),
   })
   return frame(state)
 }

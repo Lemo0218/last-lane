@@ -16,6 +16,7 @@ import { generateWaveCandidate } from "./segment-generator"
 import { solveWave } from "./solver"
 import { createStressFrame } from "./stress-harness"
 import { createTranscriptRecorder, type Transcript } from "./transcript"
+import type { SimulationEvent } from "./types"
 import { createWaveRuntime, type WaveRuntimeDependencies } from "./wave-runtime"
 
 export const GameCanvas = ({
@@ -66,7 +67,6 @@ export const GameCanvas = ({
     let scoreCounters = INITIAL_RUN_SCORE
     let tick = 0
     let finished = false
-    let effects = createEffectPool()
     let stress = stressEnabled ? createStressFrame(runtime.active.production.simulation) : undefined
     let frameSamples = 0
     const performanceMetrics = createFramePerformance()
@@ -77,10 +77,15 @@ export const GameCanvas = ({
       metrics = resizeCanvas(canvas)
     }
     const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    let effects = createEffectPool(reducedMotion)
+    let previousDrawNow = performance.now()
     const draw = (now: number): void => {
       const workStarted = performance.now()
+      const frameIntervalMs = Math.max(0, now - previousDrawNow)
+      previousDrawNow = now
       const advanced = advanceFrame(clock, now, visible && !pausedRef.current)
       clock = advanced.clock
+      const frameEvents: SimulationEvent[] = []
       for (let step = 0; step < advanced.steps; step += 1) {
         const previousDistance = Number(runtime.active.production.simulation.distance)
         const currentInput = input.current()
@@ -91,10 +96,11 @@ export const GameCanvas = ({
         const distanceDelta = Math.max(0, Number(state.distance) - previousDistance)
         scoreCounters = accumulateRunScore(scoreCounters, distanceDelta, state.events)
         audio.play(state.events)
+        frameEvents.push(...state.events)
         if (state.status !== "running") break
       }
       const state = runtime.active.production.simulation
-      effects = effects.step(state.events, advanced.steps * 10)
+      effects = effects.step(frameEvents, frameIntervalMs)
       if (!finished && state.status !== "running") {
         finished = true
         const elapsedMs = runtime.active.elapsedBeforeMs + runtime.active.production.atMs
@@ -124,6 +130,7 @@ export const GameCanvas = ({
           renderedState.projectiles.length +
           renderedState.gates.length,
         renderedEffects.length,
+        frameIntervalMs,
       )
       frameSamples += 1
       const shell = shellRef.current
@@ -131,6 +138,8 @@ export const GameCanvas = ({
         const snapshot = performanceMetrics.snapshot()
         shell.setAttribute("data-frame-samples", String(frameSamples))
         shell.setAttribute("data-frame-p95-ms", snapshot.p95WorkMs.toFixed(3))
+        shell.setAttribute("data-frame-interval-p95-ms", snapshot.p95IntervalMs.toFixed(3))
+        shell.setAttribute("data-long-frames", String(snapshot.longFrames))
         shell.setAttribute("data-max-entities", String(snapshot.maxEntities))
         shell.setAttribute("data-max-effects", String(snapshot.maxEffects))
         shell.setAttribute("data-functional-status", state.status)

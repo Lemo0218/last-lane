@@ -1,7 +1,6 @@
 import { expect, test } from "@playwright/test"
 
 test.use({ viewport: { width: 390, height: 844 } })
-test.skip(process.env["STRESS_E2E"] !== "true", "development-only stress harness")
 
 test("keeps touch controls responsive and frame work bounded at the mobile maximum", async ({
   page,
@@ -27,6 +26,8 @@ test("keeps touch controls responsive and frame work bounded at the mobile maxim
 
   // Then: measured browser work remains below budget and both pools are bounded
   expect(Number(await game.getAttribute("data-frame-p95-ms"))).toBeLessThan(16)
+  expect(Number(await game.getAttribute("data-frame-interval-p95-ms"))).toBeLessThan(34)
+  expect(Number(await game.getAttribute("data-long-frames"))).toBe(0)
   expect(Number(await game.getAttribute("data-max-entities"))).toBe(128)
   expect(Number(await game.getAttribute("data-max-effects"))).toBe(32)
   await expect(game).toHaveAttribute("data-functional-status", "running")

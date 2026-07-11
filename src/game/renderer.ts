@@ -188,13 +188,15 @@ export const renderGame = (
   circle(context, playerX, height * 0.82, 16)
   if (effects.length > 0) {
     context.fillStyle = "rgba(255,85,70,.7)"
-    for (const effect of effects)
+    for (const effect of effects) {
+      const offset = reducedMotion || !effect.moving ? 0 : 24
       circle(
         context,
-        playerX + Math.cos(effect.angle) * 24,
-        height * 0.82 + Math.sin(effect.angle) * 24,
+        playerX + Math.cos(effect.angle) * offset,
+        height * 0.82 + Math.sin(effect.angle) * offset,
         3,
       )
+    }
   }
   context.fillStyle = "#071216"
   context.font = "900 12px sans-serif"

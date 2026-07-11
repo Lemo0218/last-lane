@@ -18,5 +18,6 @@ describe("development stress frame", () => {
     ).toBe(128)
     expect(next.effects).toHaveLength(32)
     expect(next.state.status).toBe("running")
+    expect(next.state.elapsedMs).toBe(10)
   })
 })
