@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { difficultyAt, MAX_ENTITIES, STEP_MS } from "../../src/game/config"
+import { difficultyAt, MAX_ENTITIES, RUN_DURATION_MS, STEP_MS } from "../../src/game/config"
 import { createSimulation, stepSimulation } from "../../src/game/simulation"
 import type { SimulationState, UpgradeLevels } from "../../src/game/types"
 import { position, score, tick } from "../../src/game/types"
@@ -121,7 +121,7 @@ describe("combat simulation", () => {
   })
 
   it("Given run duration reached When stepped Then run completes", () => {
-    const state = createSimulation(1, noUpgrades, { elapsedMs: 179_984 })
+    const state = createSimulation(1, noUpgrades, { elapsedMs: RUN_DURATION_MS - STEP_MS })
 
     const result = step(state)
 
@@ -185,7 +185,10 @@ describe("combat simulation", () => {
   })
 
   it("Given each due boss tier When stepped Then one boss and cadence event are emitted", () => {
-    const state = createSimulation(1, noUpgrades, { elapsedMs: 59_984, spawnCooldownMs: 1000 })
+    const state = createSimulation(1, noUpgrades, {
+      elapsedMs: 60_000 - STEP_MS,
+      spawnCooldownMs: 1000,
+    })
 
     const result = step(state)
 

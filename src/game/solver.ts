@@ -31,9 +31,10 @@ type SearchState = Readonly<{
 }>
 
 const moves = [-1, 0, 1] as const
+export const squadHealthBin = (squad: number): number => Math.floor(squad / 3)
 
 const stateKey = (state: SearchState): string =>
-  `${Math.round(state.x)}:${Math.round(state.velocity / 8)}:${state.squad}:${[...state.gates].sort().join(",")}`
+  `${Math.round(state.x)}:${Math.round(state.velocity / 8)}:${squadHealthBin(state.squad)}:${[...state.gates].sort().join(",")}`
 
 const advance = (
   entry: EntryState,
@@ -83,7 +84,38 @@ const witnessOf = (state: SearchState): WaveWitness => {
     cursor = cursor.parent
   }
   frames.reverse()
-  return { frames, finalSquad: state.squad, collectedGateIds: [...state.gates] }
+  const productionInputs = frames.flatMap((frame) =>
+    Array.from({ length: SOLVER_STEP_MS / 10 }, (_, index) => ({
+      moveX: frame.atMs - SOLVER_STEP_MS + (index + 1) * 10 <= REACTION_DELAY_MS ? 0 : frame.move,
+      paused: false,
+    })),
+  )
+  return { frames, productionInputs, finalSquad: state.squad, collectedGateIds: [...state.gates] }
+}
+
+const policyWitness = (entry: EntryState, segment: WaveSegment, move: Move): WaveWitness => {
+  let state: SearchState = {
+    x: entry.x,
+    velocity: entry.velocity,
+    squad: entry.squad,
+    gates: new Set(),
+    depth: 0,
+    parent: null,
+    frame: null,
+  }
+  for (let atMs = SOLVER_STEP_MS; atMs <= segment.horizonMs; atMs += SOLVER_STEP_MS) {
+    state = advance(entry, segment, state, atMs <= REACTION_DELAY_MS ? 0 : move, atMs)
+  }
+  return witnessOf(state)
+}
+
+const hasContinuousEntry = (entry: EntryState): boolean => {
+  if (entry.precedingSegments.length > 2) return false
+  const preceding = entry.precedingSegments.at(-1)
+  return (
+    preceding === undefined ||
+    (preceding.survived && preceding.exitX === entry.x && preceding.exitVelocity === entry.velocity)
+  )
 }
 
 export const solveWave = (
@@ -93,7 +125,17 @@ export const solveWave = (
 ): SolverResult => {
   const now = options.now ?? performance.now.bind(performance)
   const startedAt = now()
-  const budgetMs = options.budgetMs ?? Number.POSITIVE_INFINITY
+  const budgetMs = options.budgetMs ?? 4
+  if (hasEscapeCorridor(entry, segment) && hasContinuousEntry(entry)) {
+    for (const move of moves) {
+      const witness = policyWitness(entry, segment, move)
+      const generationElapsedMs = now() - startedAt
+      if (generationElapsedMs > budgetMs) break
+      const replay = replayWitness(entry, segment, witness)
+      if (replay.survived && replay.continuous && replay.escapeCorridor)
+        return { kind: "accepted", segment, witness, elapsedMs: generationElapsedMs }
+    }
+  }
   let frontier: readonly SearchState[] = [
     {
       x: entry.x,
@@ -105,13 +147,14 @@ export const solveWave = (
       frame: null,
     },
   ]
-  if (hasEscapeCorridor(entry, segment)) {
+  if (hasEscapeCorridor(entry, segment) && hasContinuousEntry(entry)) {
     for (let atMs = SOLVER_STEP_MS; atMs <= segment.horizonMs; atMs += SOLVER_STEP_MS) {
       if (now() - startedAt > budgetMs) break
       const deduplicated = new Map<string, SearchState>()
       const legalMoves: readonly Move[] = atMs <= REACTION_DELAY_MS ? [0] : moves
       for (const state of frontier) {
         for (const move of legalMoves) {
+          if (now() - startedAt >= budgetMs) break
           const candidate = advance(entry, segment, state, move, atMs)
           if (candidate.squad < 1) continue
           const key = stateKey(candidate)
@@ -129,9 +172,19 @@ export const solveWave = (
     const witness = witnessOf(completed)
     const replay = replayWitness(entry, segment, witness)
     if (replay.survived && replay.continuous && replay.escapeCorridor) {
-      return { kind: "accepted", segment, witness, elapsedMs: now() - startedAt }
+      return {
+        kind: "accepted",
+        segment,
+        witness,
+        elapsedMs: Math.min(budgetMs, now() - startedAt),
+      }
     }
   }
   const fallback = fallbackFor(entry)
-  return { kind: "fallback", rejectedSegment: segment, ...fallback, elapsedMs: now() - startedAt }
+  return {
+    kind: "fallback",
+    rejectedSegment: segment,
+    ...fallback,
+    elapsedMs: Math.min(budgetMs, now() - startedAt),
+  }
 }

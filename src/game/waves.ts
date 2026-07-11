@@ -1,4 +1,6 @@
-import type { GateKind, UpgradeLevels } from "./types"
+import { createSimulation, stepSimulation } from "./simulation"
+import type { GateKind, SimulationInput, UpgradeLevels } from "./types"
+import { tick } from "./types"
 
 export const SOLVER_STEP_MS = 100 as const
 export const REACTION_DELAY_MS = 250 as const
@@ -58,6 +60,7 @@ export type WitnessFrame = Readonly<{
 
 export type WaveWitness = Readonly<{
   frames: readonly WitnessFrame[]
+  productionInputs: readonly SimulationInput[]
   finalSquad: number
   collectedGateIds: readonly string[]
 }>
@@ -121,11 +124,21 @@ export const replayWitness = (
   let squad = entry.squad
   const collected = new Set<string>()
   let continuous = witness.frames.length === segment.horizonMs / SOLVER_STEP_MS
+  let production = createSimulation(1, entry.upgrades, {
+    playerX: entry.x,
+    squad: entry.squad,
+    maximumSquad: Math.max(entry.squad, 3 + entry.upgrades.troop),
+    spawnCooldownMs: Number.MAX_SAFE_INTEGER,
+  })
+  for (const input of witness.productionInputs)
+    production = stepSimulation(production, input, tick(10))
+  continuous &&= witness.productionInputs.length === segment.horizonMs / 10
   for (let index = 0; index < witness.frames.length; index += 1) {
     const frame = witness.frames[index]
     if (frame === undefined) continue
     const atMs = (index + 1) * SOLVER_STEP_MS
     const allowedMove: Move = atMs <= REACTION_DELAY_MS ? 0 : frame.move
+    const previousX = x
     const motion = advanceMotion(x, velocity, allowedMove, entry.playfieldWidth)
     x = motion.x
     velocity = motion.velocity
@@ -133,8 +146,8 @@ export const replayWitness = (
       if (
         blocker.fromMs <= atMs &&
         atMs < blocker.toMs &&
-        x + entry.playerRadius + entry.blockerRadius >= blocker.minX &&
-        x - entry.playerRadius - entry.blockerRadius <= blocker.maxX
+        Math.max(previousX, x) + entry.playerRadius + entry.blockerRadius >= blocker.minX &&
+        Math.min(previousX, x) - entry.playerRadius - entry.blockerRadius <= blocker.maxX
       )
         squad = Math.max(0, squad - blocker.damage)
     }
@@ -151,7 +164,7 @@ export const replayWitness = (
     continuous &&= Math.abs(frame.x - x) < 0.001 && frame.atMs === atMs
   }
   return {
-    survived: squad >= 1 && continuous,
+    survived: squad >= 1 && production.squad >= 1 && continuous,
     continuous,
     escapeCorridor: hasEscapeCorridor(entry, segment),
     finalSquad: squad,

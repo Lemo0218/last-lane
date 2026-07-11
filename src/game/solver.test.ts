@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 
 import { fallbackPatterns } from "./fallbacks"
-import { solveWave } from "./solver"
+import { solveWave, squadHealthBin } from "./solver"
 import type { EntryState, WaveSegment } from "./waves"
 import { replayWitness } from "./waves"
 
@@ -18,6 +18,10 @@ const entry = (overrides: Partial<EntryState> = {}): EntryState => ({
 })
 
 describe("wave solver", () => {
+  it("discretizes squad health into stable three-soldier bins", () => {
+    expect([squadHealthBin(3), squadHealthBin(4), squadHealthBin(5)]).toEqual([1, 1, 1])
+    expect(squadHealthBin(6)).toBe(2)
+  })
   it("rejects a visually open lane that cannot be reached after reaction delay", () => {
     const segment: WaveSegment = {
       id: "unreachable",
@@ -36,6 +40,27 @@ describe("wave solver", () => {
       gates: [],
     }
     expect(solveWave(entry(), segment).kind).toBe("fallback")
+  })
+
+  it("detects a blocker crossed between solver samples", () => {
+    const segment: WaveSegment = {
+      id: "swept",
+      horizonMs: 6_000,
+      blockers: [{ fromMs: 300, toMs: 400, minX: 45, maxX: 46, damage: 20 }],
+      gates: [],
+    }
+    const result = solveWave(entry({ x: 40, velocity: 40 }), segment)
+    if (result.kind === "accepted")
+      expect(replayWitness(entry({ x: 40, velocity: 40 }), segment, result.witness).survived).toBe(
+        true,
+      )
+  })
+
+  it("holds production input neutral for exactly 250ms", () => {
+    const result = solveWave(entry(), { id: "open", horizonMs: 6_000, blockers: [], gates: [] })
+    const witness = result.witness
+    expect(witness.productionInputs.slice(0, 25).every((input) => input.moveX === 0)).toBe(true)
+    expect(witness.productionInputs).toHaveLength(600)
   })
 
   it("chooses survival over a reward before a boss", () => {
@@ -61,6 +86,12 @@ describe("wave solver", () => {
       const replay = replayWitness(state, pattern.segment(state), pattern.witness(state))
       expect(replay.survived).toBe(true)
       expect(replay.escapeCorridor).toBe(true)
+      expect(() => JSON.stringify(pattern.bounds)).not.toThrow()
     }
+  })
+
+  it("rejects non-finite fallback entries at the machine-readable boundary", () => {
+    expect(fallbackPatterns[0]?.precondition(entry({ velocity: Number.NaN }))).toBe(false)
+    expect(fallbackPatterns[0]?.precondition(entry({ playerRadius: -1 }))).toBe(false)
   })
 })

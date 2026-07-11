@@ -24,8 +24,9 @@ it.each([
     maxX: index % 2 === 0 ? 450 : 1_000,
     damage: 1,
   }))
+  blockers[0] = { fromMs: 0, toMs: 100, minX: 0, maxX: 1_000, damage: 1 }
   const segment: WaveSegment = { id: "worst", horizonMs, blockers, gates: [] }
   const result = solveWave(state, segment, { budgetMs: 4 })
-  expect(result.elapsedMs).toBeLessThan(20)
-  expect(["accepted", "fallback"]).toContain(result.kind)
+  expect(result.elapsedMs).toBeLessThanOrEqual(4)
+  expect(result.kind).toBe("fallback")
 })
