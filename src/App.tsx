@@ -15,7 +15,7 @@ import { Tutorial } from "./ui/Tutorial"
 
 type Screen = "start" | "playing" | "result" | "leaderboard"
 type CompletedRun = Readonly<{ id: number; score: ResultScore; transcript: Transcript }>
-type SubmissionState = "idle" | "pending" | "accepted" | "queued"
+type SubmissionState = "idle" | "pending" | "accepted" | "queued" | "failed"
 
 type AppProps = Readonly<{
   rankingClient?: ReturnType<typeof createRankingClient>
@@ -43,6 +43,7 @@ export function App({ rankingClient, storage = localStorage, runtimeFactory }: A
   const [rank, setRank] = useState<number>()
   const [board, setBoard] = useState<LeaderboardResult>()
   const [submissionState, setSubmissionState] = useState<SubmissionState>("idle")
+  const [submissionMessage, setSubmissionMessage] = useState<string>()
   const [playingRunId, setPlayingRunId] = useState(0)
   const generationRef = useRef(0)
   const submissionNonceRef = useRef(0)
@@ -92,6 +93,7 @@ export function App({ rankingClient, storage = localStorage, runtimeFactory }: A
     submissionNonceRef.current += 1
     visibleSubmissionRef.current = undefined
     setSubmissionState("idle")
+    setSubmissionMessage(undefined)
     const ranked = navigator.onLine && (await session.start())
     if (generation !== generationRef.current) return
     setOffline(!ranked)
@@ -114,6 +116,7 @@ export function App({ rankingClient, storage = localStorage, runtimeFactory }: A
       progress.recordBest(result.score.total)
       setRun({ id: runId, score: breakdown, transcript: result.transcript })
       setSubmissionState("idle")
+      setSubmissionMessage(undefined)
       setScreen("result")
     },
     [progress],
@@ -153,24 +156,40 @@ export function App({ rankingClient, storage = localStorage, runtimeFactory }: A
         rank={rank}
         offline={offline}
         submissionState={submissionState}
+        submissionMessage={submissionMessage}
         onReplay={() => void start()}
         onLeaderboard={() => void openLeaderboard()}
         onSubmit={(nickname) => {
-          if (submissionState !== "idle") return
+          if (submissionState !== "idle" && submissionState !== "failed") return
           const nonce = submissionNonceRef.current + 1
           submissionNonceRef.current = nonce
           const runId = run.id
           setSubmissionState("pending")
-          void session.finish(nickname, run.transcript).then((outcome) => {
-            if (runId !== generationRef.current || nonce !== submissionNonceRef.current) return
-            if (outcome.kind === "ranked") void refreshRanking(outcome.rank, true)
-            if (outcome.kind === "queued") {
-              visibleSubmissionRef.current = outcome.token
-              setOffline(true)
-              setSubmissionState("queued")
-            }
-            if (outcome.kind === "unranked") setOffline(true)
-          })
+          setSubmissionMessage(undefined)
+          void session
+            .finish(nickname, run.transcript)
+            .then((outcome) => {
+              if (runId !== generationRef.current || nonce !== submissionNonceRef.current) return
+              if (outcome.kind === "ranked") void refreshRanking(outcome.rank, true)
+              if (outcome.kind === "queued") {
+                visibleSubmissionRef.current = outcome.token
+                setOffline(true)
+                setSubmissionState("queued")
+              }
+              if (outcome.kind === "unranked") {
+                setSubmissionState("failed")
+                setSubmissionMessage("등록 시간이 만료되었습니다. 다시 시도해 주세요.")
+              }
+            })
+            .catch((error: unknown) => {
+              if (runId !== generationRef.current || nonce !== submissionNonceRef.current) return
+              setSubmissionState("failed")
+              setSubmissionMessage("랭킹 등록에 실패했습니다. 다시 시도해 주세요.")
+              console.warn(
+                "랭킹 등록에 실패했습니다.",
+                error instanceof Error ? error.message : error,
+              )
+            })
         }}
       />
     )

@@ -11,6 +11,8 @@ export type ProductionWaveState = Readonly<{
   collectedGateIds: ReadonlySet<string>
   spawnedBlockerIds: ReadonlySet<string>
   closeCallBlockerIds: ReadonlySet<string>
+  nearMissCandidateIds: ReadonlySet<string>
+  collidedBlockerIds: ReadonlySet<string>
 }>
 
 export const createProductionWaveState = (entry: EntryState): ProductionWaveState => ({
@@ -25,6 +27,8 @@ export const createProductionWaveState = (entry: EntryState): ProductionWaveStat
   collectedGateIds: new Set(),
   spawnedBlockerIds: new Set(),
   closeCallBlockerIds: new Set(),
+  nearMissCandidateIds: new Set(),
+  collidedBlockerIds: new Set(),
 })
 
 const waveNumber = (segment: WaveSegment): number => {
@@ -89,6 +93,8 @@ export const stepProductionWave = (
   const gateResult = collectGates({ ...stepped, gates: productionGates }, playerX)
   let squad = gateResult.squad
   const closeCalls = new Set(state.closeCallBlockerIds)
+  const nearMissCandidates = new Set(state.nearMissCandidateIds)
+  const collidedBlockers = new Set(state.collidedBlockerIds)
   const closeCallEvents: Array<Readonly<{ kind: "close-call"; blockerId: string }>> = []
   for (const [index, blocker] of segment.blockers.entries()) {
     const radius = entry.playerRadius + entry.blockerRadius
@@ -98,15 +104,28 @@ export const stepProductionWave = (
       active &&
       Math.max(beforeX, playerX) + radius >= blocker.minX &&
       Math.min(beforeX, playerX) - radius <= blocker.maxX
-    if (collides) squad = Math.max(0, squad - blocker.damage)
+    if (collides) {
+      squad = Math.max(0, squad - blocker.damage)
+      collidedBlockers.add(blockerId)
+      nearMissCandidates.delete(blockerId)
+    }
     const nearRadius = radius + 24
     if (
       active &&
       !collides &&
+      !collidedBlockers.has(blockerId) &&
       !closeCalls.has(blockerId) &&
       Math.max(beforeX, playerX) + nearRadius >= blocker.minX &&
       Math.min(beforeX, playerX) - nearRadius <= blocker.maxX
     ) {
+      nearMissCandidates.add(blockerId)
+    }
+    if (
+      atMs > blocker.toMs + STEP_MS &&
+      nearMissCandidates.has(blockerId) &&
+      !collidedBlockers.has(blockerId)
+    ) {
+      nearMissCandidates.delete(blockerId)
       closeCalls.add(blockerId)
       closeCallEvents.push({ kind: "close-call", blockerId })
     }
@@ -139,5 +158,7 @@ export const stepProductionWave = (
     collectedGateIds: collected,
     spawnedBlockerIds: spawnedBlockers,
     closeCallBlockerIds: closeCalls,
+    nearMissCandidateIds: nearMissCandidates,
+    collidedBlockerIds: collidedBlockers,
   }
 }

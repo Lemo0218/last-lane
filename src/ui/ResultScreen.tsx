@@ -14,7 +14,8 @@ type Props = Readonly<{
   personalBest: number
   rank?: number | undefined
   offline?: boolean
-  submissionState?: "idle" | "pending" | "accepted" | "queued"
+  submissionState?: "idle" | "pending" | "accepted" | "queued" | "failed"
+  submissionMessage?: string | undefined
   onReplay: () => void
   onSubmit?: (nickname: string) => void
   onLeaderboard?: () => void
@@ -26,13 +27,14 @@ export const ResultScreen = ({
   rank,
   offline = false,
   submissionState = "idle",
+  submissionMessage,
   onReplay,
   onSubmit,
   onLeaderboard,
 }: Props) => {
   const replayRef = useRef<HTMLButtonElement>(null)
   const [nickname, setNickname] = useState("")
-  const locked = submissionState !== "idle"
+  const locked = submissionState !== "idle" && submissionState !== "failed"
   const submitLabel =
     submissionState === "pending"
       ? "등록 중"
@@ -48,6 +50,11 @@ export const ResultScreen = ({
         <p className="eyebrow">런 종료</p>
         <h2 id="result-title">생존 기록</h2>
         {offline ? <p className="status-pill">오프라인 · 랭킹 미반영</p> : null}
+        {submissionMessage === undefined ? null : (
+          <p className="status-pill" role="alert">
+            {submissionMessage}
+          </p>
+        )}
         <strong className="total-score">{score.total.toLocaleString("ko-KR")}</strong>
         <p className="personal-best">개인 최고 {personalBest.toLocaleString("ko-KR")}</p>
         {rank === undefined ? null : <p className="rank-badge">{rank}위</p>}

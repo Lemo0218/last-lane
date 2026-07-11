@@ -45,7 +45,10 @@ export const createRankedRun = ({
         const result = await submit(payload)
         return { kind: "ranked", rank: result.rank }
       } catch (error) {
-        if (!(error instanceof TypeError)) throw error
+        if (!(error instanceof TypeError)) {
+          ticket = consumedTicket
+          throw error
+        }
         enqueue(payload)
         return { kind: "queued", token: payload.ticket.token }
       }
