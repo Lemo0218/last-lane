@@ -16,6 +16,20 @@ const INITIAL_STATS: HudStats = {
   combo: 0,
   difficulty: 1,
 }
+type Telemetry = Readonly<{
+  playerX: number
+  wave: number
+  zombies: number
+  projectiles: number
+  boss: boolean
+}>
+const INITIAL_TELEMETRY: Telemetry = {
+  playerX: 500,
+  wave: 1,
+  zombies: 0,
+  projectiles: 0,
+  boss: false,
+}
 const statsOf = (state: SimulationState, kills: number, active: ActiveWave): HudStats => ({
   score: Math.floor(Number(state.distance) / 8) + kills * 100 + state.combo * 25,
   elapsedMs: active.elapsedBeforeMs + active.production.atMs,
@@ -25,7 +39,9 @@ const statsOf = (state: SimulationState, kills: number, active: ActiveWave): Hud
   difficulty: active.index + 1,
 })
 
-export const GameCanvas = () => {
+export const GameCanvas = ({
+  audioFactory = createGameAudio,
+}: Readonly<{ audioFactory?: typeof createGameAudio }>) => {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const joystickRef = useRef<HTMLDivElement>(null)
   const audioRef = useRef<ReturnType<typeof createGameAudio> | null>(null)
@@ -33,17 +49,18 @@ export const GameCanvas = () => {
   const [paused, setPaused] = useState(false)
   const [muted, setMuted] = useState(false)
   const [stats, setStats] = useState(INITIAL_STATS)
+  const [telemetry, setTelemetry] = useState(INITIAL_TELEMETRY)
 
   useEffect(() => {
     const canvas = canvasRef.current
     const joystick = joystickRef.current
     if (canvas === null || joystick === null) return
     const context = canvas.getContext("2d")
-    if (context === null) return
     const input = createInputController(joystick)
-    const audio = createGameAudio()
+    const audio = audioFactory()
     audioRef.current = audio
-    let runtime = createWaveRuntime()
+    const deterministicBoss = new URLSearchParams(window.location.search).get("testMode") === "boss"
+    let runtime = createWaveRuntime(undefined, deterministicBoss ? 4 : 0)
     let frame = 0
     let clock: FrameClock = { previous: performance.now(), accumulator: 0 }
     let kills = 0
@@ -59,8 +76,18 @@ export const GameCanvas = () => {
         audio.play(state.events)
       }
       const state = runtime.active.production.simulation
-      renderGame(context, state, resizeCanvas(canvas), reducedMotion, runtime.active)
-      if (advanced.steps > 0) setStats(statsOf(state, kills, runtime.active))
+      const metrics = resizeCanvas(canvas)
+      if (context !== null) renderGame(context, state, metrics, reducedMotion, runtime.active)
+      if (advanced.steps > 0) {
+        setStats(statsOf(state, kills, runtime.active))
+        setTelemetry({
+          playerX: state.playerX,
+          wave: runtime.active.index + 1,
+          zombies: state.zombies.length,
+          projectiles: state.projectiles.length,
+          boss: state.zombies.some((zombie) => zombie.kind === "boss"),
+        })
+      }
       frame = requestAnimationFrame(draw)
     }
     const visibility = (): void => {
@@ -81,7 +108,7 @@ export const GameCanvas = () => {
       void audio.close()
       audioRef.current = null
     }
-  }, [])
+  }, [audioFactory])
 
   const togglePause = (): void => {
     pausedRef.current = !pausedRef.current
@@ -89,7 +116,17 @@ export const GameCanvas = () => {
   }
 
   return (
-    <main className="game-shell">
+    <main
+      className="game-shell"
+      data-player-x={telemetry.playerX}
+      data-wave={telemetry.wave}
+      data-zombies={telemetry.zombies}
+      data-projectiles={telemetry.projectiles}
+      data-boss={telemetry.boss}
+    >
+      <output className="sr-only" aria-live="polite">
+        웨이브 {telemetry.wave}, 좀비 {telemetry.zombies}, 탄환 {telemetry.projectiles}
+      </output>
       <Hud stats={stats} />
       <canvas
         ref={canvasRef}

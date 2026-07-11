@@ -15,19 +15,22 @@ export const movementForKey = (key: string): -1 | 0 | 1 => {
 export const createInputController = (element: HTMLElement): InputController => {
   let moveX: -1 | 0 | 1 = 0
   let origin = 0
+  let pointerActive = false
   const reset = (): void => {
     moveX = 0
+    pointerActive = false
     element.style.setProperty("--joystick-x", "0px")
     element.removeAttribute("data-active")
   }
   const down = (event: PointerEvent): void => {
     origin = event.clientX
     moveX = 0
+    pointerActive = true
     element.setAttribute("data-active", "true")
-    element.setPointerCapture?.(event.pointerId)
+    if (event.isTrusted) element.setPointerCapture?.(event.pointerId)
   }
   const move = (event: PointerEvent): void => {
-    if (element.hasPointerCapture?.(event.pointerId)) {
+    if (pointerActive) {
       moveX = quantizeHorizontal(event.clientX, origin)
       const displacement = Math.max(-42, Math.min(42, event.clientX - origin))
       element.style.setProperty("--joystick-x", `${displacement}px`)

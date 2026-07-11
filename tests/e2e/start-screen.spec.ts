@@ -36,3 +36,30 @@ test("plays with the touch joystick and pauses and resumes on mobile", async ({ 
   await page.getByRole("button", { name: "계속하기" }).click()
   await expect(page.getByRole("dialog", { name: "일시정지" })).not.toBeVisible()
 })
+
+test("materializes boss combat and moves through touch pointer input", async ({ page }) => {
+  // Given: deterministic boss mode starts on the fifth wave
+  await page.goto("/?testMode=boss")
+  await page.getByRole("button", { name: "게임 시작" }).click()
+  const game = page.locator(".game-shell")
+  const joystick = page.getByRole("application", { name: "이동 조이스틱" })
+  const initialX = Number(await game.getAttribute("data-player-x"))
+
+  // When: touch pointer events drag the virtual joystick left
+  await joystick.dispatchEvent("pointerdown", { pointerId: 9, pointerType: "touch", clientX: 180 })
+  await joystick.dispatchEvent("pointermove", { pointerId: 9, pointerType: "touch", clientX: 110 })
+
+  // Then: player movement and real boss/projectile combat become observable
+  await expect
+    .poll(async () => Number(await game.getAttribute("data-player-x")))
+    .toBeLessThan(initialX)
+  await expect(game).toHaveAttribute("data-wave", "5")
+  await expect
+    .poll(
+      async () =>
+        `${await game.getAttribute("data-zombies")}:${await game.getAttribute("data-projectiles")}:${await game.getAttribute("data-boss")}`,
+      { intervals: [10], timeout: 5_000 },
+    )
+    .toBe("1:1:true")
+  await joystick.dispatchEvent("pointerup", { pointerId: 9, pointerType: "touch", clientX: 110 })
+})

@@ -1,7 +1,7 @@
 import { STEP_MS } from "./config"
 import { collectGates } from "./gates"
 import { createSimulation, stepSimulation } from "./simulation"
-import type { Gate, SimulationInput, SimulationState } from "./types"
+import type { Gate, SimulationInput, SimulationState, Zombie, ZombieKind } from "./types"
 import { position, tick, velocity } from "./types"
 import type { EntryState, WaveSegment } from "./waves"
 
@@ -9,6 +9,7 @@ export type ProductionWaveState = Readonly<{
   simulation: SimulationState
   atMs: number
   collectedGateIds: ReadonlySet<string>
+  spawnedBlockerIds: ReadonlySet<string>
 }>
 
 export const createProductionWaveState = (entry: EntryState): ProductionWaveState => ({
@@ -21,7 +22,20 @@ export const createProductionWaveState = (entry: EntryState): ProductionWaveStat
   }),
   atMs: 0,
   collectedGateIds: new Set(),
+  spawnedBlockerIds: new Set(),
 })
+
+const waveNumber = (segment: WaveSegment): number => {
+  const matched = /(?:wave|boss)-(\d+)$/.exec(segment.id)
+  return matched?.[1] === undefined ? 1 : Number(matched[1])
+}
+
+const zombieKind = (segment: WaveSegment): ZombieKind => {
+  const number = waveNumber(segment)
+  if (number % 5 === 0 || segment.horizonMs === 12_000) return "boss"
+  if (number % 2 === 0) return "elite"
+  return "basic"
+}
 
 export const stepProductionWave = (
   entry: EntryState,
@@ -31,7 +45,30 @@ export const stepProductionWave = (
 ): ProductionWaveState => {
   const atMs = state.atMs + STEP_MS
   const beforeX = state.simulation.playerX
-  const stepped = stepSimulation({ ...state.simulation, gates: [] }, input, tick(STEP_MS))
+  const activating = segment.blockers.filter(
+    (blocker, index) =>
+      blocker.fromMs <= atMs &&
+      blocker.fromMs > state.atMs &&
+      !state.spawnedBlockerIds.has(`${segment.id}:${index}`),
+  )
+  const kind = zombieKind(segment)
+  const spawned: Zombie[] = activating.map((blocker, index) => ({
+    id: state.simulation.nextEntityId + index,
+    kind,
+    x: position(Math.round((blocker.minX + blocker.maxX) / 2)),
+    hp: kind === "boss" ? 240 : kind === "elite" ? 80 : 40,
+    damage: kind === "boss" ? 2 : 1,
+  }))
+  const stepped = stepSimulation(
+    {
+      ...state.simulation,
+      gates: [],
+      zombies: [...state.simulation.zombies, ...spawned],
+      nextEntityId: state.simulation.nextEntityId + spawned.length,
+    },
+    input,
+    tick(STEP_MS),
+  )
   const playerX = position(Math.max(0, Math.min(entry.playfieldWidth, stepped.playerX)))
   const collidedWaveGates = segment.gates.filter(
     (gate) =>
@@ -60,6 +97,11 @@ export const stepProductionWave = (
   }
   const collected = new Set(state.collectedGateIds)
   for (const gate of collidedWaveGates) collected.add(gate.id)
+  const spawnedBlockers = new Set(state.spawnedBlockerIds)
+  for (const blocker of activating) {
+    const index = segment.blockers.indexOf(blocker)
+    spawnedBlockers.add(`${segment.id}:${index}`)
+  }
   return {
     simulation: {
       ...stepped,
@@ -78,5 +120,6 @@ export const stepProductionWave = (
     },
     atMs,
     collectedGateIds: collected,
+    spawnedBlockerIds: spawnedBlockers,
   }
 }

@@ -103,6 +103,7 @@ const DEFAULT_DEPENDENCIES: WaveRuntimeDependencies = {
 
 export const createWaveRuntime = (
   dependencies: WaveRuntimeDependencies = DEFAULT_DEPENDENCIES,
+  startIndex = 0,
 ): WaveRuntime => {
   const entry: EntryState = {
     squad: 3,
@@ -114,5 +115,5 @@ export const createWaveRuntime = (
     blockerRadius: 12,
     precedingSegments: [],
   }
-  return runtimeFrom(dependencies, activate(dependencies, entry, 0, 0), [])
+  return runtimeFrom(dependencies, activate(dependencies, entry, startIndex, 0), [])
 }

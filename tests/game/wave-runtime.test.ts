@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-
+import { createProductionWaveState, stepProductionWave } from "../../src/game/production-wave"
 import type { SolverResult } from "../../src/game/solver"
 import { createWaveRuntime, type WaveRuntimeDependencies } from "../../src/game/wave-runtime"
 import type { EntryState, WaveSegment, WaveWitness } from "../../src/game/waves"
@@ -15,6 +15,35 @@ const witness: WaveWitness = {
 }
 
 describe("wave runtime", () => {
+  it("materializes blockers as deterministic zombies that trigger auto-fire", () => {
+    // Given: a production segment whose blocker activates on the first tick
+    const entry: EntryState = {
+      squad: 3,
+      upgrades: { troop: 0, damage: 0, fireRate: 0, recovery: 0 },
+      x: 500,
+      velocity: 0,
+      playfieldWidth: 1000,
+      playerRadius: 12,
+      blockerRadius: 12,
+      precedingSegments: [],
+    }
+    const combat: WaveSegment = {
+      id: "wave-2",
+      horizonMs: 6_000,
+      blockers: [{ fromMs: 10, toMs: 100, minX: 680, maxX: 720, damage: 1 }],
+      gates: [],
+    }
+
+    // When: production crosses the blocker activation time
+    const stepped = stepProductionWave(entry, combat, createProductionWaveState(entry), {
+      moveX: 0,
+      paused: false,
+    })
+
+    // Then: a real elite zombie and projectile exist in the simulation
+    expect(stepped.simulation.zombies).toMatchObject([{ kind: "elite" }])
+    expect(stepped.simulation.projectiles).toHaveLength(1)
+  })
   it("solves candidates with the exact entry state and applies an accepted segment", () => {
     // Given: an injected candidate generator and accepting solver
     const entries: EntryState[] = []
